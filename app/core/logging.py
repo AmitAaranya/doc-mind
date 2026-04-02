@@ -1,40 +1,22 @@
 import logging
-import logging.config
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 import sys
-from typing import Any
 
 from app.core.config import get_settings
 
 _CONFIGURED = False
 
 
-def _build_config(level: str, use_json: bool) -> dict[str, Any]:
-    fmt_text = "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s"
-    fmt_json = (
-        '{"time":"%(asctime)s","level":"%(levelname)s",'
-        '"logger":"%(name)s","line":%(lineno)d,"msg":"%(message)s"}'
-    )
-    return {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "text": {"format": fmt_text, "datefmt": "%Y-%m-%dT%H:%M:%S"},
-            "json": {"format": fmt_json, "datefmt": "%Y-%m-%dT%H:%M:%S"},
-        },
-        "handlers": {
-            "stdout": {
-                "class": "logging.StreamHandler",
-                "stream": sys.stdout,
-                "formatter": "json" if use_json else "text",
-            }
-        },
-        "root": {"level": level, "handlers": ["stdout"]},
-        # Quiet noisy third-party loggers
-        "loggers": {
-            "uvicorn.access": {"level": "WARNING", "propagate": True},
-            "httpx": {"level": "WARNING", "propagate": True},
-        },
-    }
+def _build_formatter(use_json: bool) -> logging.Formatter:
+    if use_json:
+        fmt = (
+            '{"time":"%(asctime)s","level":"%(levelname)s",'
+            '"logger":"%(name)s","line":%(lineno)d,"msg":"%(message)s"}'
+        )
+    else:
+        fmt = "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s"
+    return logging.Formatter(fmt=fmt, datefmt="%Y-%m-%dT%H:%M:%S")
 
 
 def setup_logging() -> None:
@@ -42,8 +24,34 @@ def setup_logging() -> None:
     global _CONFIGURED
     if _CONFIGURED:
         return
+
     settings = get_settings()
-    logging.config.dictConfig(_build_config(settings.LOG_LEVEL, settings.LOG_JSON))
+    formatter = _build_formatter(settings.LOG_JSON)
+
+    log_path = Path(settings.LOG_FILE)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+
+    file_handler = RotatingFileHandler(
+        filename=log_path,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(formatter)
+
+    logging.basicConfig(
+        level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
+        handlers=[console_handler, file_handler],
+        force=True,
+    )
+
+    # Quiet noisy third-party loggers.
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     _CONFIGURED = True
 
 

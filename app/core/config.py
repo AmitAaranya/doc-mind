@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # ── Logging ──────────────────────────────────────────────────────────────
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     LOG_JSON: bool = False  # set True in production for structured logs
+    LOG_FILE: str = "app.log"
 
     # ── GOOGLE LLM CONFIG ─────────────────────────────────────────────
     GOOGLE_CLOUD_API_KEY: str = ""
