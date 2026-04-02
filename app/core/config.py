@@ -20,11 +20,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     LOG_JSON: bool = False  # set True in production for structured logs
 
-    # ── Optional Infra (generic) ─────────────────────────────────────────────
-    DATABASE_URL: str = ""
-    VECTOR_DB_URL: str = ""
-    STORAGE_BUCKET: str = ""
-    LLM_API_KEY: str = ""
+    # ── GOOGLE LLM CONFIG ─────────────────────────────────────────────
+    GOOGLE_CLOUD_API_KEY: str = ""
+    GOOGLE_CLOUD_PROJECT: str = ""
+    GOOGLE_CLOUD_LOCATION: str = "global"
+    GOOGLE_GENAI_MODEL: str = "gemini-3.1-flash-lite-preview"
 
     model_config = SettingsConfigDict(
         env_file=".env",
