@@ -1,4 +1,7 @@
-"""Ingest route — upload, process, chunk, embed, and store PDF documents."""
+"""Ingest route — upload, process, chunk, embed, and store documents.
+
+Supported formats: .pdf, .docx, .doc, .md, .txt
+"""
 
 import asyncio
 import base64
@@ -14,7 +17,8 @@ from app.core.logging import get_logger
 from app.database.chroma import ChromaVectorStore
 from app.llm import embeddings, llm_chat
 from app.utils.chunker import DocumentChunker
-from app.utils.pdf_processor import ImageBlock, OrderedPDFDocument, PDFProcessor
+from app.utils.document_processor import SUPPORTED_EXTENSIONS, DocumentProcessor
+from app.utils.pdf_processor import ImageBlock, OrderedPDFDocument
 
 ingest_route = APIRouter(prefix="/ingest", tags=["ingest"])
 logger = get_logger(__name__)
@@ -98,17 +102,18 @@ async def _process_one(
         return None, f"Could not read upload: {exc}"
 
     # ── 1. Write to a temp file so PDFProcessor can open it by path ───────
+    suffix = Path(filename).suffix.lower()
     tmp_path: Path | None = None
     doc: OrderedPDFDocument
     try:
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(content)
             tmp_path = Path(tmp.name)
         try:
-            processor = PDFProcessor(tmp_path)
+            processor = DocumentProcessor(tmp_path)
             doc = await asyncio.to_thread(processor.extract_ordered)
         except Exception as exc:
-            logger.error("PDF extraction failed for %s: %s", filename, exc)
+            logger.error("Document extraction failed for %s: %s", filename, exc)
             return None, f"Extraction failed: {exc}"
     finally:
         if tmp_path and tmp_path.exists():
@@ -172,13 +177,15 @@ async def _process_one(
 
 
 @ingest_route.post("", response_model=IngestResponse, status_code=200)
-async def ingest_pdfs(files: Annotated[list[UploadFile], File(...)]) -> IngestResponse:
-    """Upload a list of PDF files to be processed, chunked, embedded, and stored.
+async def ingest_documents(files: Annotated[list[UploadFile], File(...)]) -> IngestResponse:
+    """Upload documents to be processed, chunked, embedded, and stored.
 
-    For each PDF the endpoint will:
+    Supported formats: ``.pdf``, ``.docx``, ``.doc``, ``.md``, ``.txt``
 
-    1. Extract ordered text, table, and image blocks via ``PDFProcessor``.
-    2. Persist extracted images to ``IMAGES_OUTPUT_DIR/<pdf-stem>/``.
+    For each file the endpoint will:
+
+    1. Extract ordered text, table, and image blocks via ``DocumentProcessor``.
+    2. Persist extracted images (PDF only) to ``IMAGES_OUTPUT_DIR/<stem>/``.
     3. Chunk every content block (text / table / image — images get an LLM description).
     4. Embed each chunk and upsert into the ChromaDB vector store.
 
@@ -188,9 +195,19 @@ async def ingest_pdfs(files: Annotated[list[UploadFile], File(...)]) -> IngestRe
     if not files:
         raise HTTPException(status_code=422, detail="No files provided.")
 
-    non_pdfs = [f.filename for f in files if not (f.filename or "").lower().endswith(".pdf")]
-    if non_pdfs:
-        raise HTTPException(status_code=422, detail=f"Non-PDF files rejected: {non_pdfs}")
+    unsupported = [
+        f.filename
+        for f in files
+        if Path(f.filename or "").suffix.lower() not in SUPPORTED_EXTENSIONS
+    ]
+    if unsupported:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unsupported file type(s): {unsupported}. "
+                f"Accepted: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
+            ),
+        )
 
     results: list[FileIngestResult] = []
     errors: dict[str, str] = {}
