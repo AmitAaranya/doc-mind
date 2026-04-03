@@ -5,11 +5,12 @@ from google.genai import types
 
 from app.core import SETTING
 from app.core.logging import get_logger
+from app.llm.base import BaseLLM
 
 logger = get_logger(__name__)
 
 
-class GoogleLLMModel:
+class GoogleLLMModel(BaseLLM):
     """wrapper around the Google GenAI streaming content API."""
 
     def __init__(
@@ -19,7 +20,7 @@ class GoogleLLMModel:
         api_key: str | None = None,
     ) -> None:
         self.model = model or SETTING.GOOGLE_GENAI_MODEL
-        self.api_key = api_key or SETTING.GOOGLE_CLOUD_API_KEY or SETTING.LLM_API_KEY
+        self.api_key = api_key or SETTING.GOOGLE_CLOUD_API_KEY
         self._client: genai.Client | None = None
 
     @property
@@ -27,7 +28,7 @@ class GoogleLLMModel:
         if self._client is None:
             if not self.api_key:
                 raise ValueError(
-                    "Missing Google API key. Set GOOGLE_CLOUD_API_KEY or LLM_API_KEY."
+                    "Missing Google API key. Set GOOGLE_CLOUD_API_KEY."
                 )
 
             self._client = genai.Client(
@@ -55,16 +56,26 @@ class GoogleLLMModel:
             system_instruction=system_instruction,
             temperature=temperature,
             safety_settings=[
-                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
                 types.SafetySetting(
-                    category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"
+                    category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    threshold=types.HarmBlockThreshold.OFF,
                 ),
                 types.SafetySetting(
-                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"
+                    category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    threshold=types.HarmBlockThreshold.OFF,
                 ),
-                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
             ],
-            thinking_config=types.ThinkingConfig(thinking_level=thinking_level),
+            thinking_config=types.ThinkingConfig(
+                thinking_level=types.ThinkingLevel(thinking_level)
+            ),
         )
 
         logger.debug("Starting streamed generation with model=%s", self.model)
