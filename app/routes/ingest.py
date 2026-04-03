@@ -54,22 +54,31 @@ def _save_images(doc: OrderedPDFDocument, stem: str) -> int:
     """Decode base64 image data from ImageBlocks and write files to disk.
 
     Files are written to ``IMAGES_OUTPUT_DIR/<stem>/page_N_img_I.<ext>``.
+    The directory is only created when at least one image block exists.
     Returns the number of images successfully saved.
     """
+    # Collect image blocks first — skip directory creation when there are none.
+    image_pairs: list[tuple] = [
+        (page, block)
+        for page in doc.pages
+        for block in page.blocks
+        if isinstance(block, ImageBlock)
+    ]
+    if not image_pairs:
+        return 0
+
     images_dir = Path(SETTING.IMAGES_OUTPUT_DIR) / stem
     images_dir.mkdir(parents=True, exist_ok=True)
 
     saved = 0
-    for page in doc.pages:
-        for block in page.blocks:
-            if isinstance(block, ImageBlock):
-                img = block.image
-                dest = images_dir / f"page_{page.page_number}_img_{img.index}.{img.extension}"
-                try:
-                    dest.write_bytes(base64.b64decode(img.data_b64))
-                    saved += 1
-                except Exception as exc:
-                    logger.warning("Could not save image %s: %s", dest, exc)
+    for page, block in image_pairs:
+        img = block.image
+        dest = images_dir / f"page_{page.page_number}_img_{img.index}.{img.extension}"
+        try:
+            dest.write_bytes(base64.b64decode(img.data_b64))
+            saved += 1
+        except Exception as exc:
+            logger.warning("Could not save image %s: %s", dest, exc)
     return saved
 
 

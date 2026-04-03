@@ -440,10 +440,16 @@ class PDFProcessor:
                 img_bytes: bytes | None = blk.get("image")
                 if not img_bytes:
                     continue
+                img_w: int = blk.get("width", 0)
+                img_h: int = blk.get("height", 0)
+                # Skip tiny decorative images (icons, bullets, rule lines, etc.)
+                # that carry no meaningful information for RAG retrieval.
+                if img_w < 50 or img_h < 50:
+                    continue
                 img_data = ImageData(
                     index=img_counter,
-                    width=blk.get("width", 0),
-                    height=blk.get("height", 0),
+                    width=img_w,
+                    height=img_h,
                     extension=blk.get("ext", "png"),
                     data_b64=base64.b64encode(img_bytes).decode(),
                 )
