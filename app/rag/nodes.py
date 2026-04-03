@@ -78,9 +78,9 @@ Return ONLY the rewritten query — no markdown, no explanation.\
 _GENERATE_SYSTEM = """\
 You are a precise document-analyst assistant.
 Answer the user's question based ONLY on the provided numbered context passages.
-- Be factual and cite every claim with the source index, e.g. [1], [2].
+- Be factual and comprehensive.
 - If the context is insufficient to answer fully, clearly state what is missing.
-- End your answer with a "References" section listing the document names used.\
+- Do NOT include inline citations, reference numbers, or a References section.\
 """
 
 _SUFFICIENCY_SYSTEM = """\
@@ -328,6 +328,7 @@ def retrieve_node(state: RAGState) -> dict[str, Any]:
     top_chunks = relevant[:top_k]
 
     updated_ids = all_chunk_ids + [c["id"] for c in top_chunks]
+    all_retrieved_chunks = state.get("all_retrieved_chunks", []) + top_chunks
 
     # ── Extract unique source / document names ────────────────────────────────
     references = sorted(
@@ -358,6 +359,7 @@ def retrieve_node(state: RAGState) -> dict[str, Any]:
     return {
         "retrieved_chunks": top_chunks,
         "all_chunk_ids": updated_ids,
+        "all_retrieved_chunks": all_retrieved_chunks,
         "references": references,
         "search_queries_tried": queries_tried,
         "step": {
@@ -494,9 +496,7 @@ def generate_node(state: RAGState) -> dict[str, Any]:
     prompt = (
         f"Question: {question}\n\n"
         f"Context passages:\n{context}\n\n"
-        "Answer the question comprehensively using the passages above. "
-        "Cite each claim with its passage number, e.g. [1]. "
-        "List all referenced document names at the end under 'References:'."
+        "Answer the question comprehensively using the passages above."
     )
 
     answer = _stream_and_collect(
@@ -507,9 +507,10 @@ def generate_node(state: RAGState) -> dict[str, Any]:
         )
     ).strip()
 
-    # Ensure references section is appended even if LLM skipped it
-    if references and "References:" not in answer:
-        answer += "\n\nReferences:\n" + "\n".join(f"- {r}" for r in references)
+    # Strip any References / Sources section the LLM may have appended anyway
+    answer = re.split(r"\n+(?:References|Sources):\s*", answer, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+    # Strip inline citation markers like [1], [2], [1, 2], [1][2]
+    answer = re.sub(r"\s*\[\d+(?:,\s*\d+)*\](?:\[\d+(?:,\s*\d+)*\])*", "", answer).strip()
 
     logger.info("Generated answer: %d chars from %d chunks", len(answer), len(chunks))
     return {

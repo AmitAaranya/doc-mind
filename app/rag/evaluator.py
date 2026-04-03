@@ -141,7 +141,8 @@ def evaluate_node(state: RAGState) -> dict[str, Any]:
     references = state.get("references", [])
     queries_tried = state.get("search_queries_tried", [])
 
-    contexts = [c["document"] for c in chunks]
+    all_chunks = state.get("all_retrieved_chunks") or chunks
+    contexts = [c["document"] for c in all_chunks]
 
     scores: dict[str, float] = {}
     if answer and contexts:
