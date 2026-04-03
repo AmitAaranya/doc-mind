@@ -4,6 +4,7 @@ from time import perf_counter
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
@@ -35,6 +36,29 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.ENV != "production" else None,
         lifespan=lifespan,
     )
+
+    def custom_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            openapi_version="3.0.2",
+            routes=app.routes,
+        )
+        # OpenAPI 3.0 uses format:binary for file uploads; 3.1 uses contentMediaType.
+        # Swagger UI only shows a file picker with format:binary, so patch any items
+        # that were generated in the 3.1 style.
+        for component in schema.get("components", {}).get("schemas", {}).values():
+            for prop in component.get("properties", {}).values():
+                items = prop.get("items", {})
+                if items.get("contentMediaType") == "application/octet-stream":
+                    items.pop("contentMediaType", None)
+                    items["format"] = "binary"
+        app.openapi_schema = schema
+        return app.openapi_schema
+
+    app.openapi = custom_openapi  # type: ignore[method-assign]
 
     app.add_middleware(
         CORSMiddleware,

@@ -1,13 +1,12 @@
 """Ingest route — upload, process, chunk, embed, and store PDF documents."""
 
-from __future__ import annotations
-
 import asyncio
 import base64
 import tempfile
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.core import SETTING
@@ -175,7 +174,7 @@ async def _process_one(
 
 
 @ingest_route.post("", response_model=IngestResponse, status_code=200)
-async def ingest_pdfs(files: list[UploadFile]) -> IngestResponse:
+async def ingest_pdfs(files: Annotated[list[UploadFile], File(...)]) -> IngestResponse:
     """Upload a list of PDF files to be processed, chunked, embedded, and stored.
 
     For each PDF the endpoint will:
