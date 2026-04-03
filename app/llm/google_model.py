@@ -27,9 +27,7 @@ class GoogleLLMModel(BaseLLM):
     def client(self) -> genai.Client:
         if self._client is None:
             if not self.api_key:
-                raise ValueError(
-                    "Missing Google API key. Set GOOGLE_CLOUD_API_KEY."
-                )
+                raise ValueError("Missing Google API key. Set GOOGLE_CLOUD_API_KEY.")
 
             self._client = genai.Client(
                 vertexai=True,

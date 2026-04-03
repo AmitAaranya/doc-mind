@@ -72,10 +72,10 @@ class ChunkType(StrEnum):
 class Chunk:
     """A single embeddable unit of content produced by the chunker."""
 
-    id: str               # uuid4 string — stable ID for upsert into vector DB
-    content: str          # text to embed and store
+    id: str  # uuid4 string — stable ID for upsert into vector DB
+    content: str  # text to embed and store
     chunk_type: ChunkType
-    metadata: dict        # carries provenance for retrieval filtering
+    metadata: dict  # carries provenance for retrieval filtering
 
 
 # ---------------------------------------------------------------------------
@@ -234,9 +234,7 @@ class DocumentChunker:
                         (block.order, self.chunk_table_block(block, source))
                     )
                 elif isinstance(block, ImageBlock):
-                    task = asyncio.create_task(
-                        self.chunk_image_block(block, llm, source)
-                    )
+                    task = asyncio.create_task(self.chunk_image_block(block, llm, source))
                     image_tasks.append((block.order, task))
 
             # Await all image tasks for this page concurrently

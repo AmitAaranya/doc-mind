@@ -138,9 +138,7 @@ async def _process_one(
             pn = chunk.metadata["page_number"]
             idx = chunk.metadata["image_index"]
             ext = chunk.metadata["image_extension"]
-            chunk.metadata["image_path"] = str(
-                images_dir / f"page_{pn}_img_{idx}.{ext}"
-            )
+            chunk.metadata["image_path"] = str(images_dir / f"page_{pn}_img_{idx}.{ext}")
 
     # ── 4. Embed ───────────────────────────────────────────────────────────
     try:

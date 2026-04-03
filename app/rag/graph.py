@@ -88,8 +88,8 @@ def build_rag_graph():
         "check_sufficiency",
         _decide_after_sufficiency,
         {
-            "refine": "refine_query",   # missing context → loop
-            "generate": "generate",     # context is enough → answer
+            "refine": "refine_query",  # missing context → loop
+            "generate": "generate",  # context is enough → answer
         },
     )
 

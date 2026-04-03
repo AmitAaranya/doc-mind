@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     GOOGLE_GENAI_MODEL: str = "gemini-3.1-flash-lite-preview"
 
     # ── Chunking ──────────────────────────────────────────────────────────
-    CHUNK_SIZE: int = 2048    # characters (~512 tokens at 4 chars/token)
+    CHUNK_SIZE: int = 2048  # characters (~512 tokens at 4 chars/token)
     CHUNK_OVERLAP: int = 200  # characters of overlap between adjacent text chunks
 
     model_config = SettingsConfigDict(

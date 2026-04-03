@@ -45,6 +45,7 @@ def clear_token_callback() -> None:
     """Remove the token callback for the current thread."""
     _tl.token_callback = None
 
+
 # ── System prompts ────────────────────────────────────────────────────────────
 
 _KEYWORDS_SYSTEM = """\
@@ -177,21 +178,42 @@ def extract_keywords_node(state: RAGState) -> dict[str, Any]:
     except Exception:
         # Fallback: simple word extraction, conservative top_k
         stop = {
-            "what", "how", "why", "when", "where", "who", "is", "are",
-            "the", "a", "an", "in", "on", "of", "for", "to", "and", "or",
-            "does", "do", "can", "could", "would", "should", "will",
+            "what",
+            "how",
+            "why",
+            "when",
+            "where",
+            "who",
+            "is",
+            "are",
+            "the",
+            "a",
+            "an",
+            "in",
+            "on",
+            "of",
+            "for",
+            "to",
+            "and",
+            "or",
+            "does",
+            "do",
+            "can",
+            "could",
+            "would",
+            "should",
+            "will",
         }
-        keywords = [
-            w for w in re.findall(r"\b\w{3,}\b", question.lower()) if w not in stop
-        ]
+        keywords = [w for w in re.findall(r"\b\w{3,}\b", question.lower()) if w not in stop]
         top_k = 8
 
     logger.info("Extracted %d keywords, top_k=%d: %s", len(keywords), top_k, keywords)
-    kw_preview = ", ".join(keywords[:6]) + (f" (+{len(keywords)-6} more)" if len(keywords) > 6 else "")
+    kw_preview = ", ".join(keywords[:6]) + (
+        f" (+{len(keywords) - 6} more)" if len(keywords) > 6 else ""
+    )
     desc = (
         f"Identified {len(keywords)} key term(s): {kw_preview}. "
-        f"Retrieval depth: {top_k} chunks"
-        + (f" ({reasoning})" if reasoning else "")
+        f"Retrieval depth: {top_k} chunks" + (f" ({reasoning})" if reasoning else "")
         if keywords
         else f"No key terms found — using full question. Retrieval depth: {top_k} chunks."
     )
@@ -215,10 +237,7 @@ def rewrite_query_node(state: RAGState) -> dict[str, Any]:
     question = state["question"]
     keywords = state.get("keywords", [])
 
-    prompt = (
-        f"Original question: {question}\n"
-        f"Key terms identified: {', '.join(keywords)}"
-    )
+    prompt = f"Original question: {question}\nKey terms identified: {', '.join(keywords)}"
 
     optimized_query = _stream_and_collect(
         llm_chat.stream_text(
@@ -260,7 +279,9 @@ def retrieve_node(state: RAGState) -> dict[str, Any]:
         active_query = state.get("optimized_query") or state["question"]
     else:
         # refine_query_node appended the new query to search_queries_tried
-        active_query = queries_tried[-1] if queries_tried else state.get("optimized_query", state["question"])
+        active_query = (
+            queries_tried[-1] if queries_tried else state.get("optimized_query", state["question"])
+        )
 
     if active_query not in queries_tried:
         queries_tried = queries_tried + [active_query]
@@ -311,7 +332,8 @@ def retrieve_node(state: RAGState) -> dict[str, Any]:
     # ── Extract unique source / document names ────────────────────────────────
     references = sorted(
         {
-            c["metadata"].get("source")
+            c["metadata"].get("source_file")
+            or c["metadata"].get("source")
             or c["metadata"].get("filename")
             or c["metadata"].get("file_name")
             or "unknown"
@@ -322,8 +344,14 @@ def retrieve_node(state: RAGState) -> dict[str, Any]:
     discarded = len(candidates) - len(relevant)
     logger.info(
         "Retrieve iter=%d: semantic=%d keyword=%d candidates=%d relevant(>50%%)=%d kept=%d discarded=%d refs=%s",
-        iteration, len(semantic_chunks), len(keyword_chunks), len(candidates),
-        len(relevant), len(top_chunks), discarded, references,
+        iteration,
+        len(semantic_chunks),
+        len(keyword_chunks),
+        len(candidates),
+        len(relevant),
+        len(top_chunks),
+        discarded,
+        references,
     )
     active_q = queries_tried[-1] if queries_tried else ""
     doc_part = f"{len(references)} document(s)" if references else "no matching documents"
@@ -363,7 +391,9 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
 
     # If we've hit the ceiling, just proceed regardless
     if iteration >= max_iterations - 1 or not chunks:
-        reason = "max iterations reached" if iteration >= max_iterations - 1 else "no chunks retrieved"
+        reason = (
+            "max iterations reached" if iteration >= max_iterations - 1 else "no chunks retrieved"
+        )
         logger.info("Sufficiency check skipped (%s) — forcing proceed to generate.", reason)
         return {
             "is_sufficient": True,
@@ -375,10 +405,7 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
         }
 
     # Build a compact context summary for the LLM (first 300 chars per chunk)
-    snippet_lines = [
-        f"[{i+1}] {c['document'][:300]}"
-        for i, c in enumerate(chunks[:6])
-    ]
+    snippet_lines = [f"[{i + 1}] {c['document'][:300]}" for i, c in enumerate(chunks[:6])]
     context_preview = "\n".join(snippet_lines)
 
     prompt = (
@@ -411,11 +438,15 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
 
     logger.info(
         "Sufficiency check iter=%d: sufficient=%s — %s",
-        iteration, is_sufficient, reason,
+        iteration,
+        is_sufficient,
+        reason,
     )
     if is_sufficient:
         su_title = "Context Complete"
-        su_desc = f"All required information found — proceeding to generate answer. {reason}".strip()
+        su_desc = (
+            f"All required information found — proceeding to generate answer. {reason}".strip()
+        )
     else:
         su_title = "Context Incomplete"
         su_desc = f"More information needed — will refine search. {reason}".strip()
@@ -448,7 +479,8 @@ def generate_node(state: RAGState) -> dict[str, Any]:
     context_parts: list[str] = []
     for i, chunk in enumerate(chunks, 1):
         src = (
-            chunk["metadata"].get("source")
+            chunk["metadata"].get("source_file")
+            or chunk["metadata"].get("source")
             or chunk["metadata"].get("filename")
             or chunk["metadata"].get("file_name")
             or "unknown"
@@ -541,15 +573,22 @@ def refine_query_node(state: RAGState) -> dict[str, Any]:
     updated_queries = queries_tried + [new_query]
     logger.info(
         "Refined query (iter %d→%d) mode=%s: %s",
-        iteration, iteration + 1, search_mode, new_query,
+        iteration,
+        iteration + 1,
+        search_mode,
+        new_query,
     )
-    mode_label = {"keyword": "keyword (exact match)", "semantic": "semantic (conceptual)", "hybrid": "hybrid"}.get(search_mode, search_mode)
+    mode_label = {
+        "keyword": "keyword (exact match)",
+        "semantic": "semantic (conceptual)",
+        "hybrid": "hybrid",
+    }.get(search_mode, search_mode)
     return {
         "search_queries_tried": updated_queries,
         "search_mode": search_mode,
         "iteration": iteration + 1,
         "step": {
             "title": f"Search Refined (loop {iteration + 1})",
-            "description": f"Switching to {mode_label} search — new query: \"{new_query}\"",
+            "description": f'Switching to {mode_label} search — new query: "{new_query}"',
         },
     }

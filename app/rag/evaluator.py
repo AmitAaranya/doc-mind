@@ -48,7 +48,9 @@ def _make_langchain_llm():
 
         def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
             prompt = "\n".join(str(m.content) for m in messages)
-            text = "".join(chunk for chunk in _llm.stream_text(prompt=prompt, temperature=0) if chunk)
+            text = "".join(
+                chunk for chunk in _llm.stream_text(prompt=prompt, temperature=0) if chunk
+            )
             return ChatResult(generations=[ChatGeneration(message=AIMessage(content=text))])
 
     return _Adapter()
@@ -83,11 +85,11 @@ def _run_ragas(
     from ragas.dataset_schema import SingleTurnSample
     from ragas.embeddings import LangchainEmbeddingsWrapper
     from ragas.llms import LangchainLLMWrapper
-    from ragas.metrics.collections import (
-        AnswerRelevancy,
-        ContextPrecisionWithoutReference,
-        Faithfulness,
+    from ragas.metrics._answer_relevance import AnswerRelevancy
+    from ragas.metrics._context_precision import (
+        LLMContextPrecisionWithoutReference as ContextPrecisionWithoutReference,
     )
+    from ragas.metrics._faithfulness import Faithfulness
 
     ragas_llm = LangchainLLMWrapper(_make_langchain_llm())
     ragas_emb = LangchainEmbeddingsWrapper(_make_langchain_embeddings())
@@ -152,7 +154,9 @@ def evaluate_node(state: RAGState) -> dict[str, Any]:
 
     logger.info(
         "RAGAS evaluation — iterations=%d  avg_score=%.3f  scores=%s",
-        iteration, avg, scores,
+        iteration,
+        avg,
+        scores,
     )
 
     # ── Persist to local JSONL ────────────────────────────────────────────────

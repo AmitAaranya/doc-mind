@@ -7,7 +7,8 @@ class StepStatus(TypedDict):
     """Human-readable progress label written by every node.
     Consumed by the SSE route to push live stage events to the client.
     """
-    title: str        # short label  e.g. "Keywords Extracted"
+
+    title: str  # short label  e.g. "Keywords Extracted"
     description: str  # detail line  e.g. "Identified 5 key terms: neural network, ..."
 
 
@@ -23,7 +24,7 @@ class RAGState(TypedDict, total=False):
     max_iterations: Required[int]
 
     # ── Stage progress (written by EVERY node, read by SSE route) ────────────
-    step: StepStatus   # {"title": "...", "description": "..."}
+    step: StepStatus  # {"title": "...", "description": "..."}
 
     # ── Keyword & query rewriting ─────────────────────────────────────────────
     keywords: list[str]
@@ -31,17 +32,17 @@ class RAGState(TypedDict, total=False):
     search_queries_tried: list[str]  # all queries issued so far
 
     # ── Retrieval ─────────────────────────────────────────────────────────────
-    top_k: int                              # LLM-estimated chunks per pass (clamped 3-20)
+    top_k: int  # LLM-estimated chunks per pass (clamped 3-20)
     retrieved_chunks: list[dict[str, Any]]  # chunks for CURRENT iteration
-    all_chunk_ids: list[str]               # dedup across all iterations
+    all_chunk_ids: list[str]  # dedup across all iterations
 
     # ── Generation ────────────────────────────────────────────────────────────
     answer: str
     references: list[str]  # unique document/source names cited
 
     # ── Sufficiency check (post-retrieve LLM gate) ───────────────────────────
-    is_sufficient: bool     # True = context is enough → proceed to generate
-    sufficiency_reason: str # LLM explanation of what is/isn't covered
+    is_sufficient: bool  # True = context is enough → proceed to generate
+    sufficiency_reason: str  # LLM explanation of what is/isn't covered
 
     # ── Next-retrieval hint set by refine_query_node ──────────────────────────
     # "keyword"  → exact-match $contains search
