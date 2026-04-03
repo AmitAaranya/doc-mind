@@ -14,6 +14,17 @@ class BaseLLM(ABC):
     ) -> Sequence[str]:
         """Return streamed chunks for a prompt."""
 
+    def describe_image(self, image_b64: str, mime_type: str = "image/png") -> str:
+        """Generate a text description of a base64-encoded image.
+
+        Default implementation raises NotImplementedError.  Subclasses that
+        support multimodal input should override this method.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support image description. "
+            "Override describe_image() in your LLM subclass."
+        )
+
     @abstractmethod
     def health_check(self) -> tuple[bool, str]:
         """Return provider health status and an optional message."""

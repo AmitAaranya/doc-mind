@@ -87,6 +87,73 @@ class GoogleLLMModel(BaseLLM):
             if chunk.text:
                 yield chunk.text
 
+    def describe_image(self, image_b64: str, mime_type: str = "image/png") -> str:
+        """Send an inline image to Gemini and return a descriptive text response.
+
+        Parameters
+        ----------
+        image_b64:
+            Base64-encoded image bytes (as returned by ImageData.data_b64).
+        mime_type:
+            MIME type string, e.g. ``"image/png"`` or ``"image/jpeg"``.
+        """
+        import base64
+
+        image_bytes = base64.b64decode(image_b64)
+        contents = [
+            types.Content(
+                role="user",
+                parts=[
+                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                    types.Part.from_text(
+                        text=(
+                            "Describe this image extracted from a PDF document. "
+                            "Include: visual type (chart, photo, diagram, screenshot, etc.), "
+                            "key data points, all visible text and labels, "
+                            "axes or legend values if present, and any contextual information "
+                            "that would help answer questions about this document. "
+                            "Be factual and specific."
+                        )
+                    ),
+                ],
+            )
+        ]
+        config = types.GenerateContentConfig(
+            system_instruction=(
+                "You are a document analysis assistant. "
+                "Describe PDF images for use in a retrieval-augmented generation (RAG) system."
+            ),
+            temperature=0.2,
+            safety_settings=[
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
+            ],
+        )
+        logger.debug("Describing image with model=%s mime_type=%s", self.model, mime_type)
+        description_parts: list[str] = []
+        for chunk in self.client.models.generate_content_stream(
+            model=self.model,
+            contents=contents,
+            config=config,
+        ):
+            if chunk.text:
+                description_parts.append(chunk.text)
+        return "".join(description_parts)
+
     def health_check(self) -> tuple[bool, str]:
         """Send a tiny probe prompt and verify the model returns text."""
         try:

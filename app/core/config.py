@@ -24,11 +24,18 @@ class Settings(BaseSettings):
     # ── Vector DB ─────────────────────────────────────────────────────────
     CHROMA_PATH: str = ".chroma"  # directory where ChromaDB persists data
 
+    # ── Image storage ─────────────────────────────────────────────────────
+    IMAGES_OUTPUT_DIR: str = "images"  # directory where extracted PDF images are saved
+
     # ── GOOGLE LLM CONFIG ─────────────────────────────────────────────
     GOOGLE_CLOUD_API_KEY: str = ""
     GOOGLE_CLOUD_PROJECT: str = ""
     GOOGLE_CLOUD_LOCATION: str = "global"
     GOOGLE_GENAI_MODEL: str = "gemini-3.1-flash-lite-preview"
+
+    # ── Chunking ──────────────────────────────────────────────────────────
+    CHUNK_SIZE: int = 2048    # characters (~512 tokens at 4 chars/token)
+    CHUNK_OVERLAP: int = 200  # characters of overlap between adjacent text chunks
 
     model_config = SettingsConfigDict(
         env_file=".env",

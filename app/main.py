@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
-from app.routes import common_route
+from app.routes import common_route, ingest_route
 
 setup_logging()
 logger = get_logger(__name__)
@@ -64,6 +64,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     app.include_router(common_route)
+    app.include_router(ingest_route)
 
     return app
 
