@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
-from app.routes import common_route, ingest_route
+from app.routes import common_route, ingest_route, query_route
 
 setup_logging()
 logger = get_logger(__name__)
@@ -65,6 +65,7 @@ def create_app() -> FastAPI:
 
     app.include_router(common_route)
     app.include_router(ingest_route)
+    app.include_router(query_route)
 
     return app
 
