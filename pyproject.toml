@@ -11,6 +11,7 @@ dependencies = [
     "google-cloud-aiplatform>=1.145.0",
     "google-genai>=1.70.0",
     "fastembed>=0.7.3",
+    "chromadb>=0.6",
 ]
 
 [project.optional-dependencies]

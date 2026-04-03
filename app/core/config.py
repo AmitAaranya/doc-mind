@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     LOG_JSON: bool = False  # set True in production for structured logs
     LOG_FILE: str = "app.log"
 
+    # ── Vector DB ─────────────────────────────────────────────────────────
+    CHROMA_PATH: str = ".chroma"  # directory where ChromaDB persists data
+
     # ── GOOGLE LLM CONFIG ─────────────────────────────────────────────
     GOOGLE_CLOUD_API_KEY: str = ""
     GOOGLE_CLOUD_PROJECT: str = ""

@@ -1,5 +1,5 @@
-from app.core.config import Settings
+from app.core.config import get_settings
 
-SETTING = Settings()
+SETTING = get_settings()
 
 __all__ = ["SETTING"]
