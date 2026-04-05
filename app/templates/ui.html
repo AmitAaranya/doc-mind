@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Doc Mind Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Manrope:wght@400;500;700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --bg: #f7f4ec;
+      --ink: #1b1f23;
+      --panel: #ffffff;
+      --muted: #6a6f77;
+      --line: #dde2e8;
+      --accent: #0d5c63;
+      --accent-2: #f4a259;
+      --danger: #ad2831;
+      --ok: #157f1f;
+      --shadow: 0 20px 50px rgba(16, 25, 35, 0.08);
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 85% 0%, #ffd9a933, transparent 45%),
+        radial-gradient(circle at 0% 90%, #77b28c26, transparent 40%),
+        var(--bg);
+      font-family: "Manrope", sans-serif;
+      line-height: 1.5;
+    }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #0d5c63, #3a7d44);
+      color: #fff;
+      border-radius: 22px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+      animation: in 420ms ease-out;
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: clamp(1.7rem, 2.4vw, 2.4rem);
+      letter-spacing: 0.02em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 75ch;
+      color: #f2f7f8;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 980px) {
+      .grid {
+        grid-template-columns: 1.1fr 1fr;
+      }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      animation: in 450ms ease-out;
+    }
+
+    .card h2 {
+      margin: 0 0 12px;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1.15rem;
+      letter-spacing: 0.01em;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .row.inline {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    label {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #324052;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    input[type="file"], textarea, input[type="number"] {
+      width: 100%;
+      border: 1px solid #c9d4e1;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      background: #fdfefe;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-family: "Space Grotesk", sans-serif;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 140ms ease;
+    }
+
+    button:hover { transform: translateY(-1px); filter: saturate(1.08); }
+    button:active { transform: translateY(0); }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-warm { background: var(--accent-2); color: #222; }
+    .btn-ghost { background: #eff3f8; color: #1f2a37; }
+
+    .status {
+      margin-top: 6px;
+      font-size: 0.9rem;
+      color: var(--muted);
+      min-height: 1.35em;
+    }
+
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--danger); }
+
+    .mono {
+      font-family: "ui-monospace", "SFMono-Regular", Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      background: #10161f;
+      color: #eef6ff;
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 120px;
+      max-height: 300px;
+      overflow: auto;
+      border: 1px solid #223043;
+    }
+
+    .stages {
+      margin: 0;
+      padding-left: 18px;
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    .stages li { margin-bottom: 10px; }
+    .stages strong { display: block; }
+    .small { color: var(--muted); font-size: 0.9rem; }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fcfdff;
+      margin-bottom: 8px;
+    }
+
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: #23303f;
+    }
+
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      background: #e8f2f3;
+      color: #1e4e53;
+      padding: 2px 8px;
+      font-size: 0.8rem;
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    @keyframes in {
+      from { transform: translateY(6px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1>Doc Mind Studio</h1>
+      <p>
+        Upload documents, run RAG queries, watch live stream tokens from all
+        pipeline stages, and inspect full document/chunk data. User scope is
+        fixed to <strong>dummy-user</strong> for now.
+      </p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>1) Upload Documents</h2>
+        <form id="uploadForm">
+          <div class="row">
+            <div>
+              <label for="files">Files</label>
+              <input id="files" name="files" type="file" multiple required />
+            </div>
+          </div>
+          <button class="btn-primary" type="submit">Upload</button>
+          <div id="uploadStatus" class="status"></div>
+        </form>
+      </article>
+
+      <article class="card">
+        <h2>2) Ask Questions (Streaming)</h2>
+        <form id="queryForm">
+          <div class="row">
+            <div>
+              <label for="question">Question</label>
+              <textarea
+                id="question"
+                required
+                placeholder="Ask a question about uploaded documents..."
+              ></textarea>
+            </div>
+          </div>
+          <div class="row inline">
+            <div>
+              <label for="maxIterations">Max Iterations</label>
+              <input id="maxIterations" type="number" min="1" max="5" value="3" />
+            </div>
+            <div style="display:flex;align-items:end;gap:8px;">
+              <button class="btn-warm" type="submit">Run Query</button>
+              <button class="btn-ghost" id="clearOutput" type="button">Clear Output</button>
+            </div>
+          </div>
+          <div id="queryStatus" class="status"></div>
+        </form>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>3) Live Pipeline Stream</h2>
+        <div class="small">Stage events</div>
+        <ol id="stageList" class="stages"></ol>
+        <div class="small">Token stream (all nodes)</div>
+        <div id="tokenStream" class="mono"></div>
+      </article>
+
+      <article class="card">
+        <h2>4) Final Result</h2>
+        <div class="small">Answer</div>
+        <div id="answerBox" class="mono"></div>
+        <div class="small" style="margin-top:10px;">References</div>
+        <div id="referenceBox"></div>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>5) Stored Data View</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="btn-primary" id="refreshData" type="button">Refresh Data</button>
+      </div>
+      <div id="datasetStats" class="small"></div>
+      <h3 style="font-family:'Space Grotesk',sans-serif;margin:14px 0 8px;">Documents</h3>
+      <div id="documentsList"></div>
+      <h3 style="font-family:'Space Grotesk',sans-serif;margin:14px 0 8px;">Chunks</h3>
+      <div id="chunksList"></div>
+    </section>
+  </main>
+
+  <script>
+    const USER_ID = "dummy-user";
+    const uploadForm = document.getElementById("uploadForm");
+    const filesInput = document.getElementById("files");
+    const uploadStatus = document.getElementById("uploadStatus");
+
+    const queryForm = document.getElementById("queryForm");
+    const questionInput = document.getElementById("question");
+    const maxIterationsInput = document.getElementById("maxIterations");
+    const queryStatus = document.getElementById("queryStatus");
+    const stageList = document.getElementById("stageList");
+    const tokenStream = document.getElementById("tokenStream");
+    const answerBox = document.getElementById("answerBox");
+    const referenceBox = document.getElementById("referenceBox");
+    const clearOutput = document.getElementById("clearOutput");
+
+    const refreshDataBtn = document.getElementById("refreshData");
+    const datasetStats = document.getElementById("datasetStats");
+    const documentsList = document.getElementById("documentsList");
+    const chunksList = document.getElementById("chunksList");
+
+    function setStatus(el, message, kind) {
+      el.textContent = message || "";
+      el.className = "status" + (kind ? " " + kind : "");
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function clearStreamingOutput() {
+      stageList.innerHTML = "";
+      tokenStream.textContent = "";
+      answerBox.textContent = "";
+      referenceBox.innerHTML = "";
+    }
+
+    function appendStage(title, description) {
+      const li = document.createElement("li");
+      const strong = document.createElement("strong");
+      strong.textContent = title || "Stage";
+      const p = document.createElement("div");
+      p.className = "small";
+      p.textContent = description || "";
+      li.appendChild(strong);
+      li.appendChild(p);
+      stageList.appendChild(li);
+      stageList.scrollTop = stageList.scrollHeight;
+    }
+
+    function appendToken(tok) {
+      tokenStream.textContent += tok;
+      tokenStream.scrollTop = tokenStream.scrollHeight;
+    }
+
+    function renderReferences(refs) {
+      referenceBox.innerHTML = "";
+      if (!Array.isArray(refs) || refs.length === 0) {
+        referenceBox.textContent = "No references returned.";
+        return;
+      }
+      for (const ref of refs) {
+        const span = document.createElement("span");
+        span.className = "pill";
+        span.textContent = String(ref);
+        referenceBox.appendChild(span);
+      }
+    }
+
+    function renderDataView(payload) {
+      const docs = payload.documents || [];
+      const chunks = payload.chunks || [];
+      datasetStats.textContent =
+        "User: " + payload.user_id +
+        " | Documents: " + docs.length +
+        " | Chunks: " + chunks.length;
+
+      documentsList.innerHTML = "";
+      if (docs.length === 0) {
+        documentsList.innerHTML = "<div class='small'>No documents stored yet.</div>";
+      } else {
+        for (const doc of docs) {
+          const details = document.createElement("details");
+          details.innerHTML =
+            "<summary>" + escapeHtml(doc.source_file || "unknown") +
+            " <span class='small'>(" + (doc.content_length || 0) + " chars)</span></summary>" +
+            "<div class='small'>Ingested: " + escapeHtml(doc.ingested_at || "") + "</div>" +
+            "<div class='mono' style='margin-top:8px;max-height:220px;'>" +
+            escapeHtml(doc.content || "") +
+            "</div>";
+          documentsList.appendChild(details);
+        }
+      }
+
+      chunksList.innerHTML = "";
+      if (chunks.length === 0) {
+        chunksList.innerHTML = "<div class='small'>No chunks stored yet.</div>";
+      } else {
+        for (const chunk of chunks) {
+          const metaParts = [];
+          const meta = chunk.metadata || {};
+          for (const key of Object.keys(meta)) {
+            metaParts.push(
+              "<span class='pill'>" +
+              escapeHtml(key) +
+              ": " +
+              escapeHtml(meta[key]) +
+              "</span>"
+            );
+          }
+
+          const details = document.createElement("details");
+          details.innerHTML =
+            "<summary>" + escapeHtml(chunk.id || "chunk") + "</summary>" +
+            "<div class='small'>" + (chunk.document_length || 0) + " chars</div>" +
+            "<div style='margin-top:6px;'>" + metaParts.join("") + "</div>" +
+            "<div class='mono' style='margin-top:8px;max-height:220px;'>" +
+            escapeHtml(chunk.document || "") +
+            "</div>";
+          chunksList.appendChild(details);
+        }
+      }
+    }
+
+    async function refreshDataView() {
+      try {
+        const resp = await fetch("/ui/data", { method: "GET" });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || "Could not load data");
+        }
+        renderDataView(data);
+      } catch (err) {
+        datasetStats.textContent = "Failed to load dataset: " + err;
+      }
+    }
+
+    uploadForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const files = filesInput.files;
+      if (!files || files.length === 0) {
+        setStatus(uploadStatus, "Select at least one file.", "err");
+        return;
+      }
+      const fd = new FormData();
+      fd.append("user_id", USER_ID);
+      for (const f of files) {
+        fd.append("files", f);
+      }
+      setStatus(uploadStatus, "Uploading and indexing...", "");
+      try {
+        const resp = await fetch("/ingest", { method: "POST", body: fd });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || "Upload failed");
+        }
+        setStatus(
+          uploadStatus,
+          "Uploaded. Chunks: " + data.total_chunks + ", Images: " + data.total_images_saved,
+          "ok"
+        );
+        filesInput.value = "";
+        await refreshDataView();
+      } catch (err) {
+        setStatus(uploadStatus, "Upload failed: " + err, "err");
+      }
+    });
+
+    queryForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const question = questionInput.value.trim();
+      const maxIterations = Number(maxIterationsInput.value || "3");
+      if (!question) {
+        setStatus(queryStatus, "Enter a question.", "err");
+        return;
+      }
+
+      clearStreamingOutput();
+      setStatus(queryStatus, "Running query with live stream...", "");
+
+      const payload = {
+        user_id: USER_ID,
+        question,
+        max_iterations: Math.max(1, Math.min(5, maxIterations)),
+      };
+
+      try {
+        const resp = await fetch("/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok || !resp.body) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.detail || "Query request failed");
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() || "";
+
+          for (const frame of frames) {
+            const line = frame.split("\n").find((l) => l.startsWith("data: "));
+            if (!line) {
+              continue;
+            }
+            let event;
+            try {
+              event = JSON.parse(line.slice(6));
+            } catch {
+              continue;
+            }
+
+            if (event.type === "stage") {
+              appendStage(event.title, event.description);
+            } else if (event.type === "token") {
+              appendToken(event.content || "");
+            } else if (event.type === "result") {
+              answerBox.textContent = event.answer || "";
+              renderReferences(event.references || []);
+            } else if (event.type === "error") {
+              setStatus(queryStatus, "Query error: " + (event.detail || "unknown"), "err");
+            } else if (event.type === "done") {
+              setStatus(queryStatus, "Query complete.", "ok");
+            }
+          }
+        }
+      } catch (err) {
+        setStatus(queryStatus, "Query failed: " + err, "err");
+      }
+    });
+
+    clearOutput.addEventListener("click", clearStreamingOutput);
+    refreshDataBtn.addEventListener("click", refreshDataView);
+
+    refreshDataView();
+  </script>
+</body>
+</html>
