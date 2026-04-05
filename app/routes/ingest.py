@@ -204,9 +204,7 @@ async def _process_one(
         # store as a single row so the whole document is queryable without
         # having to re-join individual chunks later.
         full_content = "\n\n".join(
-            c.content
-            for c in chunks
-            if c.metadata.get("block_type") not in ("image",)
+            c.content for c in chunks if c.metadata.get("block_type") not in ("image",)
         )
         _bm25_store.upsert_document(
             user_id=user_id,

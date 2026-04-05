@@ -50,6 +50,16 @@ def clear_token_callback() -> None:
     _tl.token_callback = None
 
 
+def set_current_node(name: str) -> None:
+    """Track which pipeline node is currently executing (thread-local)."""
+    _tl.current_node = name
+
+
+def get_current_node() -> str:
+    """Return the name of the currently executing pipeline node."""
+    return getattr(_tl, "current_node", "unknown")
+
+
 # ── System prompts ────────────────────────────────────────────────────────────
 
 _KEYWORDS_SYSTEM = """\
@@ -159,6 +169,7 @@ def _chromadb_rows(raw: dict) -> list[dict[str, Any]]:
 
 
 def extract_keywords_node(state: RAGState) -> dict[str, Any]:
+    set_current_node("extract_keywords")
     question = state["question"]
 
     keywords: list[str] = []
@@ -238,6 +249,7 @@ def extract_keywords_node(state: RAGState) -> dict[str, Any]:
 
 
 def rewrite_query_node(state: RAGState) -> dict[str, Any]:
+    set_current_node("rewrite_query")
     question = state["question"]
     keywords = state.get("keywords", [])
 
@@ -294,9 +306,7 @@ def dispatch_retrieve_node(state: RAGState) -> dict[str, Any]:
         "search_queries_tried": queries_tried,
         "step": {
             "title": "Dispatching Retrieval",
-            "description": (
-                f'Launching parallel semantic + BM25 search — "{active_q}"'
-            ),
+            "description": (f'Launching parallel semantic + BM25 search — "{active_q}"'),
         },
     }
 
@@ -308,8 +318,8 @@ def _active_query(state: RAGState) -> tuple[str, list[str]]:
     if iteration == 0:
         query = state.get("optimized_query") or state["question"]
     else:
-        query = queries_tried[-1] if queries_tried else state.get(
-            "optimized_query", state["question"]
+        query = (
+            queries_tried[-1] if queries_tried else state.get("optimized_query", state["question"])
         )
     if query not in queries_tried:
         queries_tried = queries_tried + [query]
@@ -340,8 +350,7 @@ def retrieve_semantic_node(state: RAGState) -> dict[str, Any]:
         "step": {
             "title": "Semantic Search",
             "description": (
-                f"Vector similarity search returned {len(chunks)} candidate(s)"
-                f' — "{active_q}"'
+                f'Vector similarity search returned {len(chunks)} candidate(s) — "{active_q}"'
             ),
         },
     }
@@ -404,8 +413,7 @@ def retrieve_bm25_node(state: RAGState) -> dict[str, Any]:
         "step": {
             "title": "BM25 Search",
             "description": (
-                f"BM25 keyword search returned {len(bm25_chunks)} candidate(s)"
-                f' — "{active_q}"'
+                f'BM25 keyword search returned {len(bm25_chunks)} candidate(s) — "{active_q}"'
             ),
         },
     }
@@ -498,6 +506,7 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
     The graph uses ``is_sufficient`` to decide whether to loop back through
     refine_query → retrieve or to proceed to generate.
     """
+    set_current_node("check_sufficiency")
     question = state["question"]
     keywords = state.get("keywords", [])
     chunks = state.get("retrieved_chunks", [])
@@ -617,10 +626,14 @@ def _merge_adjacent_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]
         same_source = cm.get("source_file") == nm.get("source_file")
         same_page = cm.get("page_number") == nm.get("page_number")
         same_block = cm.get("block_order") == nm.get("block_order")
-        consec_block = same_source and same_page and (
-            isinstance(cm.get("block_order"), int)
-            and isinstance(nm.get("block_order"), int)
-            and nm["block_order"] == cm["block_order"] + 1
+        consec_block = (
+            same_source
+            and same_page
+            and (
+                isinstance(cm.get("block_order"), int)
+                and isinstance(nm.get("block_order"), int)
+                and nm["block_order"] == cm["block_order"] + 1
+            )
         )
 
         if same_source and same_page and same_block and "char_start" in cm and "char_start" in nm:
@@ -636,26 +649,20 @@ def _merge_adjacent_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]
                 merged_text = cur_text + " " + nxt_text
             current = dict(current)
             current["document"] = merged_text
-            current["distance"] = min(
-                current.get("distance", 1.0), nxt.get("distance", 1.0)
-            )
+            current["distance"] = min(current.get("distance", 1.0), nxt.get("distance", 1.0))
 
         elif consec_block:
             # ── Consecutive blocks on the same page: join with blank line ─
             current = dict(current)
             current["document"] = current["document"].rstrip() + "\n\n" + nxt["document"].lstrip()
-            current["distance"] = min(
-                current.get("distance", 1.0), nxt.get("distance", 1.0)
-            )
+            current["distance"] = min(current.get("distance", 1.0), nxt.get("distance", 1.0))
 
         else:
             merged.append(current)
             current = dict(nxt)
 
     merged.append(current)
-    logger.debug(
-        "Chunk merge: %d chunks → %d merged passages", len(chunks), len(merged)
-    )
+    logger.debug("Chunk merge: %d chunks → %d merged passages", len(chunks), len(merged))
     return merged
 
 
@@ -663,6 +670,7 @@ def _merge_adjacent_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def generate_node(state: RAGState) -> dict[str, Any]:
+    set_current_node("generate")
     question = state["question"]
     chunks = state.get("retrieved_chunks", [])
     references = state.get("references", [])
@@ -711,7 +719,9 @@ def generate_node(state: RAGState) -> dict[str, Any]:
     ).strip()
 
     # Strip any References / Sources section the LLM may have appended anyway
-    answer = re.split(r"\n+(?:References|Sources):\s*", answer, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+    answer = re.split(r"\n+(?:References|Sources):\s*", answer, maxsplit=1, flags=re.IGNORECASE)[
+        0
+    ].strip()
     # Strip inline citation markers like [1], [2], [1, 2], [1][2]
     answer = re.sub(r"\s*\[\d+(?:,\s*\d+)*\](?:\[\d+(?:,\s*\d+)*\])*", "", answer).strip()
 
@@ -735,6 +745,7 @@ def refine_query_node(state: RAGState) -> dict[str, Any]:
     Reads ``sufficiency_reason`` to understand what is missing, then asks the
     LLM to produce a query + ``search_mode`` (keyword | semantic | hybrid).
     """
+    set_current_node("refine_query")
     question = state["question"]
     keywords = state.get("keywords", [])
     queries_tried = state.get("search_queries_tried", [])

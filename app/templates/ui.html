@@ -7,484 +7,1397 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Manrope:wght@400;500;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap"
     rel="stylesheet"
   />
   <style>
     :root {
-      --bg: #f7f4ec;
-      --ink: #1b1f23;
-      --panel: #ffffff;
-      --muted: #6a6f77;
-      --line: #dde2e8;
-      --accent: #0d5c63;
-      --accent-2: #f4a259;
-      --danger: #ad2831;
-      --ok: #157f1f;
-      --shadow: 0 20px 50px rgba(16, 25, 35, 0.08);
-      --radius: 16px;
+      --bg: #f4f6fb;
+      --surface: #ffffff;
+      --surface-alt: #f8fafc;
+      --ink: #0f172a;
+      --ink-2: #334155;
+      --ink-3: #64748b;
+      --ink-4: #94a3b8;
+      --border: #e2e8f0;
+      --border-light: #f1f5f9;
+      --accent: #0d9488;
+      --accent-light: #ccfbf1;
+      --accent-dark: #0f766e;
+      --blue: #3b82f6;
+      --blue-light: #dbeafe;
+      --warm: #f59e0b;
+      --warm-light: #fef3c7;
+      --danger: #ef4444;
+      --danger-light: #fee2e2;
+      --success: #10b981;
+      --success-light: #d1fae5;
+      --purple: #8b5cf6;
+      --purple-light: #ede9fe;
+      --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-sm: 0 2px 8px rgba(0,0,0,0.05);
+      --shadow: 0 4px 24px rgba(0,0,0,0.07);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,0.10);
+      --r-sm: 8px;
+      --r: 12px;
+      --r-lg: 16px;
+      --r-xl: 20px;
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-display: 'Space Grotesk', var(--font);
+      --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
     }
 
-    * { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      margin: 0;
+      font-family: var(--font);
       color: var(--ink);
-      background:
-        radial-gradient(circle at 85% 0%, #ffd9a933, transparent 45%),
-        radial-gradient(circle at 0% 90%, #77b28c26, transparent 40%),
-        var(--bg);
-      font-family: "Manrope", sans-serif;
-      line-height: 1.5;
+      background: var(--bg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
+    /* ── Page Layout ───────────────────────────────────────── */
     .page {
       max-width: 1200px;
       margin: 0 auto;
-      padding: 20px 16px 40px;
-      display: grid;
+      padding: 20px 16px 60px;
+      display: flex;
+      flex-direction: column;
       gap: 16px;
     }
 
+    /* ── Hero ───────────────────────────────────────────────── */
     .hero {
-      background: linear-gradient(135deg, #0d5c63, #3a7d44);
+      background: linear-gradient(135deg, #0f766e 0%, #0d9488 40%, #14b8a6 100%);
       color: #fff;
-      border-radius: 22px;
-      padding: 24px;
+      border-radius: var(--r-xl);
+      padding: 28px 28px 24px;
+      position: relative;
+      overflow: hidden;
       box-shadow: var(--shadow);
-      animation: in 420ms ease-out;
     }
-
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -10%;
+      width: 320px;
+      height: 320px;
+      background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 70%);
+      border-radius: 50%;
+    }
     .hero h1 {
-      margin: 0 0 8px;
-      font-family: "Space Grotesk", sans-serif;
-      font-size: clamp(1.7rem, 2.4vw, 2.4rem);
-      letter-spacing: 0.02em;
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 2.4vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+      position: relative;
     }
-
     .hero p {
-      margin: 0;
-      max-width: 75ch;
-      color: #f2f7f8;
+      color: rgba(255,255,255,0.85);
+      font-size: 0.9rem;
+      max-width: 65ch;
+      position: relative;
     }
 
-    .grid {
+    /* ── Cards ──────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+      animation: slideUp 350ms ease-out;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .card-header h2 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-icon {
+      width: 20px;
+      height: 20px;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    /* ── Top Grid ──────────────────────────────────────────── */
+    .top-grid {
       display: grid;
       grid-template-columns: 1fr;
       gap: 16px;
     }
-
-    @media (min-width: 980px) {
-      .grid {
-        grid-template-columns: 1.1fr 1fr;
-      }
+    @media (min-width: 768px) {
+      .top-grid { grid-template-columns: 1fr 1fr; }
     }
 
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 16px;
-      box-shadow: var(--shadow);
-      animation: in 450ms ease-out;
+    /* ── Forms ──────────────────────────────────────────────── */
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.82rem;
+      color: var(--ink-2);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    textarea, input[type="number"] {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 0.92rem;
+      background: var(--surface);
+      color: var(--ink);
+      transition: border-color 150ms, box-shadow 150ms;
+      outline: none;
+    }
+    textarea:focus, input[type="number"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(13,148,136,0.1);
+    }
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+      line-height: 1.5;
     }
 
-    .card h2 {
-      margin: 0 0 12px;
-      font-family: "Space Grotesk", sans-serif;
-      font-size: 1.15rem;
-      letter-spacing: 0.01em;
-    }
-
-    .row {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
+    /* ── File Upload Zone ──────────────────────────────────── */
+    .file-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--r);
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 200ms, background 200ms;
       margin-bottom: 12px;
     }
-
-    .row.inline {
-      grid-template-columns: repeat(2, 1fr);
+    .file-zone:hover, .file-zone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-light);
     }
-
-    label {
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: #324052;
-      display: block;
+    .file-zone svg {
+      width: 32px;
+      height: 32px;
+      color: var(--ink-4);
       margin-bottom: 6px;
     }
-
-    input[type="file"], textarea, input[type="number"] {
-      width: 100%;
-      border: 1px solid #c9d4e1;
-      border-radius: 12px;
-      padding: 10px 12px;
-      font: inherit;
-      background: #fdfefe;
+    .file-zone p {
+      font-size: 0.85rem;
+      color: var(--ink-3);
+    }
+    .file-zone .file-names {
+      font-size: 0.82rem;
+      color: var(--accent-dark);
+      font-weight: 600;
+      margin-top: 4px;
     }
 
-    textarea {
-      min-height: 90px;
-      resize: vertical;
-    }
-
-    button {
-      border: 0;
-      border-radius: 12px;
-      padding: 10px 14px;
-      font-family: "Space Grotesk", sans-serif;
-      font-weight: 700;
+    /* ── Buttons ────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      border-radius: var(--r);
+      padding: 9px 16px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.88rem;
       cursor: pointer;
-      transition: transform 120ms ease, filter 140ms ease;
+      transition: transform 100ms, box-shadow 150ms, filter 150ms;
     }
-
-    button:hover { transform: translateY(-1px); filter: saturate(1.08); }
-    button:active { transform: translateY(0); }
-
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn svg { width: 16px; height: 16px; }
     .btn-primary { background: var(--accent); color: #fff; }
-    .btn-warm { background: var(--accent-2); color: #222; }
-    .btn-ghost { background: #eff3f8; color: #1f2a37; }
+    .btn-primary:hover { box-shadow: 0 4px 12px rgba(13,148,136,0.3); }
+    .btn-warm { background: linear-gradient(135deg, #f59e0b, #f97316); color: #fff; }
+    .btn-warm:hover { box-shadow: 0 4px 12px rgba(245,158,11,0.3); }
+    .btn-ghost {
+      background: var(--surface-alt);
+      color: var(--ink-2);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--border-light); }
+    .btn-sm { padding: 6px 12px; font-size: 0.82rem; }
 
-    .status {
-      margin-top: 6px;
+    /* ── Status Message ────────────────────────────────────── */
+    .status-msg {
+      font-size: 0.85rem;
+      margin-top: 8px;
+      min-height: 1.2em;
+      color: var(--ink-3);
+    }
+    .status-msg.ok { color: var(--success); }
+    .status-msg.err { color: var(--danger); }
+
+    /* ── Query Actions ─────────────────────────────────────── */
+    .query-actions {
+      display: flex;
+      align-items: end;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .iter-field { flex-shrink: 0; }
+    .iter-field input { width: 70px; }
+
+    /* ═══════════════════════════════════════════════════════════
+       Pipeline Output Section
+       ═══════════════════════════════════════════════════════════ */
+    .pipeline-card { min-height: 200px; }
+    .pipeline-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .pipeline-header h2 {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Empty State ───────────────────────────────────────── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      text-align: center;
+    }
+    .empty-state svg { width: 48px; height: 48px; color: var(--ink-4); margin-bottom: 12px; }
+    .empty-state h3 {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      color: var(--ink-3);
+      margin-bottom: 4px;
+    }
+    .empty-state p { font-size: 0.88rem; color: var(--ink-4); }
+
+    /* ── Processing Badge ──────────────────────────────────── */
+    .processing-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--accent-dark);
+      background: var(--accent-light);
+      border: 1px solid #99f6e4;
+      border-radius: 999px;
+      padding: 5px 14px;
+      margin-bottom: 16px;
+    }
+    .processing-badge[hidden] { display: none; }
+    .mini-spinner {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      border: 2px solid #99f6e4;
+      border-top-color: var(--accent);
+      animation: spin 0.7s linear infinite;
+    }
+
+    /* ── Timeline ──────────────────────────────────────────── */
+    .timeline {
+      position: relative;
+      padding-left: 36px;
+      margin-bottom: 4px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 13px;
+      top: 14px;
+      bottom: 14px;
+      width: 2px;
+      background: var(--border);
+      border-radius: 1px;
+    }
+
+    /* ── Step ───────────────────────────────────────────────── */
+    .step {
+      position: relative;
+      padding-bottom: 4px;
+      animation: fadeSlideIn 280ms ease-out;
+    }
+    .step:last-child { padding-bottom: 0; }
+
+    .step-dot {
+      position: absolute;
+      left: -36px;
+      top: 2px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      transition: background 200ms, border-color 200ms;
+    }
+    .step-dot svg { width: 14px; height: 14px; }
+
+    /* Step states */
+    .step[data-status="active"] .step-dot {
+      background: var(--accent-light);
+      border: 2px solid var(--accent);
+    }
+    .step[data-status="active"] .step-dot::after {
+      content: '';
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--accent);
+      animation: spin 0.7s linear infinite;
+      position: absolute;
+    }
+    .step[data-status="done"] .step-dot {
+      background: var(--success-light);
+      border: 2px solid var(--success);
+    }
+    .step[data-status="done"] .step-dot svg { color: var(--success); }
+    .step[data-status="error"] .step-dot {
+      background: var(--danger-light);
+      border: 2px solid var(--danger);
+    }
+
+    .step-body {
+      padding: 6px 0 12px;
+    }
+    .step-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      cursor: pointer;
+      gap: 8px;
+      padding: 4px 8px;
+      border-radius: var(--r-sm);
+      transition: background 120ms;
+    }
+    .step-header:hover { background: var(--surface-alt); }
+    .step-info { flex: 1; min-width: 0; }
+    .step-title {
+      font-weight: 600;
       font-size: 0.9rem;
-      color: var(--muted);
-      min-height: 1.35em;
+      color: var(--ink);
+      display: block;
     }
+    .step[data-status="active"] .step-title { color: var(--accent-dark); }
+    .step-desc {
+      font-size: 0.82rem;
+      color: var(--ink-3);
+      display: block;
+      margin-top: 1px;
+      line-height: 1.4;
+    }
+    .step-chevron {
+      width: 18px;
+      height: 18px;
+      color: var(--ink-4);
+      flex-shrink: 0;
+      margin-top: 2px;
+      transition: transform 200ms;
+    }
+    .step.expanded .step-chevron { transform: rotate(180deg); }
 
-    .status.ok { color: var(--ok); }
-    .status.err { color: var(--danger); }
-
-    .mono {
-      font-family: "ui-monospace", "SFMono-Regular", Menlo, Consolas, monospace;
+    /* ── Step Thinking (expandable) ────────────────────────── */
+    .step-detail {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 300ms ease, opacity 200ms;
+      opacity: 0;
+      margin: 0 8px;
+    }
+    .step.expanded .step-detail,
+    .step[data-status="active"] .step-detail {
+      max-height: 500px;
+      opacity: 1;
+    }
+    .step-thinking {
+      background: #1e293b;
+      color: #cbd5e1;
+      border-radius: var(--r-sm);
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.5;
       white-space: pre-wrap;
-      background: #10161f;
-      color: #eef6ff;
-      border-radius: 12px;
+      word-break: break-word;
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: 6px;
+    }
+    .step-thinking:empty { display: none; }
+
+    /* ═══════════════════════════════════════════════════════════
+       Answer Section
+       ═══════════════════════════════════════════════════════════ */
+    .answer-section {
+      margin-top: 8px;
+      animation: fadeSlideIn 300ms ease-out;
+    }
+    .answer-section[hidden] { display: none; }
+
+    .answer-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .answer-divider::before, .answer-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .answer-divider span {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.82rem;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+
+    .answer-content {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 16px 20px;
+      font-size: 0.92rem;
+      line-height: 1.7;
+      color: var(--ink);
+      min-height: 48px;
+      position: relative;
+    }
+    .answer-content p { margin-bottom: 10px; }
+    .answer-content p:last-child { margin-bottom: 0; }
+    .answer-content strong { font-weight: 600; }
+    .answer-content code {
+      background: #e8ecf1;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.86em;
+    }
+    .answer-content pre {
+      background: #1e293b;
+      color: #e2e8f0;
       padding: 12px;
-      min-height: 120px;
-      max-height: 300px;
-      overflow: auto;
-      border: 1px solid #223043;
+      border-radius: var(--r-sm);
+      overflow-x: auto;
+      margin: 8px 0;
+      font-family: var(--font-mono);
+      font-size: 0.84em;
+      line-height: 1.5;
+    }
+    .answer-content ul, .answer-content ol {
+      margin: 6px 0 10px 20px;
+    }
+    .answer-content li { margin-bottom: 4px; }
+    .answer-content h1, .answer-content h2, .answer-content h3, .answer-content h4 {
+      font-family: var(--font-display);
+      margin: 14px 0 6px;
+    }
+    .answer-content h1 { font-size: 1.3em; }
+    .answer-content h2 { font-size: 1.15em; }
+    .answer-content h3 { font-size: 1.05em; }
+    .answer-content h4 { font-size: 0.95em; }
+
+    .answer-streaming {
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
-    .stages {
-      margin: 0;
-      padding-left: 18px;
-      max-height: 260px;
-      overflow: auto;
+    /* Blinking cursor */
+    .typing-cursor::after {
+      content: '▋';
+      color: var(--accent);
+      animation: blink 0.8s step-end infinite;
+      margin-left: 1px;
     }
 
-    .stages li { margin-bottom: 10px; }
-    .stages strong { display: block; }
-    .small { color: var(--muted); font-size: 0.9rem; }
-
-    details {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 10px;
-      background: #fcfdff;
+    /* ── References ────────────────────────────────────────── */
+    .refs-section { margin-top: 12px; }
+    .refs-section[hidden] { display: none; }
+    .refs-label, .scores-label, .meta-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.8rem;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
       margin-bottom: 8px;
     }
-
-    summary {
-      cursor: pointer;
-      font-weight: 700;
-      color: #23303f;
+    .refs-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
     }
-
-    .pill {
-      display: inline-block;
+    .ref-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--blue-light);
+      color: #1e40af;
       border-radius: 999px;
-      background: #e8f2f3;
-      color: #1e4e53;
-      padding: 2px 8px;
+      padding: 4px 12px;
       font-size: 0.8rem;
-      margin-right: 6px;
-      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .ref-pill svg { width: 12px; height: 12px; }
+
+    /* ── Scores ────────────────────────────────────────────── */
+    .scores-section { margin-top: 14px; }
+    .scores-section[hidden] { display: none; }
+    .scores-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .score-card {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px 14px;
+      min-width: 130px;
+      flex: 1;
+    }
+    .score-name {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 2px;
+    }
+    .score-value {
+      font-family: var(--font-display);
+      font-size: 1.3rem;
+      font-weight: 700;
+    }
+    .score-good { color: var(--success); }
+    .score-mid { color: var(--warm); }
+    .score-low { color: var(--danger); }
+
+    /* ── Meta / Query Details ──────────────────────────────── */
+    .meta-section { margin-top: 14px; }
+    .meta-section[hidden] { display: none; }
+    .meta-section details {
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px 14px;
+      background: var(--surface-alt);
+    }
+    .meta-section summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--ink-2);
+    }
+    .meta-content {
+      margin-top: 8px;
+      font-size: 0.85rem;
+      color: var(--ink-3);
+      line-height: 1.6;
+    }
+    .meta-content .meta-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .meta-content .meta-key {
+      font-weight: 600;
+      color: var(--ink-2);
+      min-width: 120px;
     }
 
-    @keyframes in {
+    /* ═══════════════════════════════════════════════════════════
+       Data View Section
+       ═══════════════════════════════════════════════════════════ */
+    .data-stats {
+      font-size: 0.85rem;
+      color: var(--ink-3);
+      margin-bottom: 12px;
+    }
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      padding: 8px 16px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--ink-3);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color 150ms, border-color 150ms;
+    }
+    .tab-btn:hover { color: var(--ink-2); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .data-item {
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      margin-bottom: 8px;
+      overflow: hidden;
+    }
+    .data-item summary {
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: var(--ink);
+      background: var(--surface-alt);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      list-style: none;
+    }
+    .data-item summary::-webkit-details-marker { display: none; }
+    .data-item summary::after {
+      content: '▸';
+      font-size: 0.9rem;
+      color: var(--ink-4);
+      transition: transform 200ms;
+    }
+    .data-item[open] summary::after { transform: rotate(90deg); }
+    .data-item-body {
+      padding: 12px 14px;
+      border-top: 1px solid var(--border-light);
+    }
+    .data-meta { margin-bottom: 8px; }
+    .data-pill {
+      display: inline-block;
+      background: var(--accent-light);
+      color: var(--accent-dark);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      margin-right: 4px;
+      margin-bottom: 4px;
+    }
+    .data-preview {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: var(--r-sm);
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .data-empty {
+      text-align: center;
+      padding: 24px;
+      color: var(--ink-4);
+      font-size: 0.88rem;
+    }
+
+    /* ── Animations ────────────────────────────────────────── */
+    @keyframes slideUp {
+      from { transform: translateY(8px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes fadeSlideIn {
       from { transform: translateY(6px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(13,148,136,0.3); }
+      50% { box-shadow: 0 0 0 6px rgba(13,148,136,0); }
+    }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .page { padding: 12px 10px 40px; gap: 12px; }
+      .hero { padding: 20px; }
+      .hero h1 { font-size: 1.3rem; }
+      .card { padding: 16px; }
+      .query-actions { flex-direction: column; align-items: stretch; }
+      .scores-grid { flex-direction: column; }
+      .score-card { min-width: unset; }
     }
   </style>
 </head>
 <body>
   <main class="page">
-    <section class="hero">
+    <!-- ═══ Hero ═══ -->
+    <header class="hero">
       <h1>Doc Mind Studio</h1>
-      <p>
-        Upload documents, run RAG queries, watch live stream tokens from all
-        pipeline stages, and inspect full document/chunk data. User scope is
-        fixed to <strong>dummy-user</strong> for now.
-      </p>
-    </section>
+      <p>Upload documents, run RAG queries with live streaming, and inspect every pipeline stage.</p>
+    </header>
 
-    <section class="grid">
-      <article class="card">
-        <h2>1) Upload Documents</h2>
+    <!-- ═══ Upload & Query ═══ -->
+    <div class="top-grid">
+      <!-- Upload -->
+      <section class="card">
+        <div class="card-header">
+          <h2>
+            <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            Upload Documents
+          </h2>
+        </div>
         <form id="uploadForm">
-          <div class="row">
-            <div>
-              <label for="files">Files</label>
-              <input id="files" name="files" type="file" multiple required />
-            </div>
+          <div class="file-zone" id="dropZone">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p>Drop files here or <strong>click to browse</strong></p>
+            <div class="file-names" id="fileNames"></div>
+            <input id="files" name="files" type="file" multiple required hidden />
           </div>
-          <button class="btn-primary" type="submit">Upload</button>
-          <div id="uploadStatus" class="status"></div>
+          <button class="btn btn-primary" type="submit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload &amp; Index
+          </button>
+          <div id="uploadStatus" class="status-msg"></div>
         </form>
-      </article>
+      </section>
 
-      <article class="card">
-        <h2>2) Ask Questions (Streaming)</h2>
+      <!-- Query -->
+      <section class="card">
+        <div class="card-header">
+          <h2>
+            <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Ask Questions
+          </h2>
+        </div>
         <form id="queryForm">
-          <div class="row">
-            <div>
-              <label for="question">Question</label>
-              <textarea
-                id="question"
-                required
-                placeholder="Ask a question about uploaded documents..."
-              ></textarea>
-            </div>
+          <div>
+            <label for="question">Your Question</label>
+            <textarea
+              id="question"
+              required
+              placeholder="Ask a question about your uploaded documents..."
+            ></textarea>
           </div>
-          <div class="row inline">
-            <div>
-              <label for="maxIterations">Max Iterations</label>
+          <div class="query-actions">
+            <div class="iter-field">
+              <label for="maxIterations">Iterations</label>
               <input id="maxIterations" type="number" min="1" max="5" value="3" />
             </div>
-            <div style="display:flex;align-items:end;gap:8px;">
-              <button class="btn-warm" type="submit">Run Query</button>
-              <button class="btn-ghost" id="clearOutput" type="button">Clear Output</button>
-            </div>
+            <button class="btn btn-warm" type="submit">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              Run Query
+            </button>
           </div>
-          <div id="queryStatus" class="status"></div>
+          <div id="queryStatus" class="status-msg"></div>
         </form>
-      </article>
-    </section>
+      </section>
+    </div>
 
-    <section class="grid">
-      <article class="card">
-        <h2>3) Live Pipeline Stream</h2>
-        <div class="small">Stage events</div>
-        <ol id="stageList" class="stages"></ol>
-        <div class="small">Token stream (all nodes)</div>
-        <div id="tokenStream" class="mono"></div>
-      </article>
-
-      <article class="card">
-        <h2>4) Final Result</h2>
-        <div class="small">Answer</div>
-        <div id="answerBox" class="mono"></div>
-        <div class="small" style="margin-top:10px;">References</div>
-        <div id="referenceBox"></div>
-      </article>
-    </section>
-
-    <section class="card">
-      <h2>5) Stored Data View</h2>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-        <button class="btn-primary" id="refreshData" type="button">Refresh Data</button>
+    <!-- ═══ Pipeline Output (merged sections 3 + 4) ═══ -->
+    <section class="card pipeline-card">
+      <div class="pipeline-header">
+        <h2>
+          <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Pipeline Output
+        </h2>
+        <button class="btn btn-ghost btn-sm" id="clearOutput" type="button">Clear</button>
       </div>
-      <div id="datasetStats" class="small"></div>
-      <h3 style="font-family:'Space Grotesk',sans-serif;margin:14px 0 8px;">Documents</h3>
-      <div id="documentsList"></div>
-      <h3 style="font-family:'Space Grotesk',sans-serif;margin:14px 0 8px;">Chunks</h3>
-      <div id="chunksList"></div>
+
+      <!-- Empty state -->
+      <div id="emptyState" class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <h3>No queries yet</h3>
+        <p>Ask a question above to see the RAG pipeline in action</p>
+      </div>
+
+      <!-- Pipeline content -->
+      <div id="pipelineContent" hidden>
+        <div id="processingBadge" class="processing-badge" hidden>
+          <span class="mini-spinner"></span>
+          <span>Pipeline running...</span>
+        </div>
+
+        <!-- Steps Timeline -->
+        <div id="timeline" class="timeline"></div>
+
+        <!-- Answer Section -->
+        <div id="answerSection" class="answer-section" hidden>
+          <div class="answer-divider"><span>Answer</span></div>
+          <div id="answerContent" class="answer-content"></div>
+        </div>
+
+        <!-- References -->
+        <div id="refsSection" class="refs-section" hidden>
+          <div class="refs-label">Sources</div>
+          <div id="referenceBox" class="refs-pills"></div>
+        </div>
+
+        <!-- Scores -->
+        <div id="scoresSection" class="scores-section" hidden>
+          <div class="scores-label">Quality Metrics (RAGAS)</div>
+          <div id="scoresBox" class="scores-grid"></div>
+        </div>
+
+        <!-- Meta Details -->
+        <div id="metaSection" class="meta-section" hidden>
+          <details>
+            <summary>Query Details</summary>
+            <div id="metaContent" class="meta-content"></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Stored Data View ═══ -->
+    <section class="card">
+      <div class="card-header">
+        <h2>
+          <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Stored Data
+        </h2>
+        <button class="btn btn-primary btn-sm" id="refreshData" type="button">Refresh</button>
+      </div>
+      <div id="datasetStats" class="data-stats"></div>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="docs">Documents</button>
+        <button class="tab-btn" data-tab="chunks">Chunks</button>
+      </div>
+      <div id="docsTab" class="tab-content active">
+        <div id="documentsList"></div>
+      </div>
+      <div id="chunksTab" class="tab-content">
+        <div id="chunksList"></div>
+      </div>
     </section>
   </main>
 
   <script>
+    /* ═══════════════════════════════════════════════════════════
+       Constants & DOM References
+       ═══════════════════════════════════════════════════════════ */
     const USER_ID = "dummy-user";
-    const uploadForm = document.getElementById("uploadForm");
-    const filesInput = document.getElementById("files");
-    const uploadStatus = document.getElementById("uploadStatus");
 
-    const queryForm = document.getElementById("queryForm");
+    const uploadForm    = document.getElementById("uploadForm");
+    const filesInput    = document.getElementById("files");
+    const fileNames     = document.getElementById("fileNames");
+    const dropZone      = document.getElementById("dropZone");
+    const uploadStatus  = document.getElementById("uploadStatus");
+
+    const queryForm     = document.getElementById("queryForm");
     const questionInput = document.getElementById("question");
-    const maxIterationsInput = document.getElementById("maxIterations");
-    const queryStatus = document.getElementById("queryStatus");
-    const stageList = document.getElementById("stageList");
-    const tokenStream = document.getElementById("tokenStream");
-    const answerBox = document.getElementById("answerBox");
-    const referenceBox = document.getElementById("referenceBox");
-    const clearOutput = document.getElementById("clearOutput");
+    const maxIterInput  = document.getElementById("maxIterations");
+    const queryStatus   = document.getElementById("queryStatus");
+    const processBadge  = document.getElementById("processingBadge");
 
-    const refreshDataBtn = document.getElementById("refreshData");
-    const datasetStats = document.getElementById("datasetStats");
+    const emptyState    = document.getElementById("emptyState");
+    const pipeContent   = document.getElementById("pipelineContent");
+    const timeline      = document.getElementById("timeline");
+    const answerSection = document.getElementById("answerSection");
+    const answerContent = document.getElementById("answerContent");
+    const refsSection   = document.getElementById("refsSection");
+    const referenceBox  = document.getElementById("referenceBox");
+    const scoresSection = document.getElementById("scoresSection");
+    const scoresBox     = document.getElementById("scoresBox");
+    const metaSection   = document.getElementById("metaSection");
+    const metaContent   = document.getElementById("metaContent");
+    const clearBtn      = document.getElementById("clearOutput");
+
+    const refreshBtn    = document.getElementById("refreshData");
+    const datasetStats  = document.getElementById("datasetStats");
     const documentsList = document.getElementById("documentsList");
-    const chunksList = document.getElementById("chunksList");
+    const chunksList    = document.getElementById("chunksList");
 
-    function setStatus(el, message, kind) {
-      el.textContent = message || "";
-      el.className = "status" + (kind ? " " + kind : "");
+    /* ═══════════════════════════════════════════════════════════
+       Node labels & icons
+       ═══════════════════════════════════════════════════════════ */
+    const NODE_LABELS = {
+      extract_keywords:  "Extracting Keywords",
+      rewrite_query:     "Optimizing Query",
+      dispatch_retrieve: "Dispatching Search",
+      retrieve_semantic: "Semantic Search",
+      retrieve_bm25:     "Keyword Search",
+      merge_retrieve:    "Merging Results",
+      check_sufficiency: "Analyzing Context",
+      generate:          "Generating Answer",
+      refine_query:      "Refining Search",
+      evaluate:          "Evaluating Quality",
+    };
+
+    /* ═══════════════════════════════════════════════════════════
+       State
+       ═══════════════════════════════════════════════════════════ */
+    let steps = [];           // {id, node, title, desc, tokens, displayed, status, el}
+    let rawAnswerTokens = ""; // full buffered answer text
+    let displayedAnswer = ""; // what's currently rendered
+    let isStreaming = false;
+    let stepIdCounter = 0;
+
+    /* ═══════════════════════════════════════════════════════════
+       Typewriter Engine
+       ═══════════════════════════════════════════════════════════
+       Google's API yields text in large chunks (50-200 chars).
+       This engine buffers them and renders character-by-character
+       at ~12ms/char for a smooth Copilot-like streaming feel.
+    */
+    const CHAR_DELAY = 12; // ms between characters
+    let _twTimer = null;
+
+    function startTypewriter() {
+      if (_twTimer) return; // already running
+      _twTimer = setInterval(_tickTypewriter, CHAR_DELAY);
     }
 
-    function escapeHtml(str) {
-      return String(str)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#39;");
+    function stopTypewriter() {
+      if (_twTimer) { clearInterval(_twTimer); _twTimer = null; }
     }
 
-    function clearStreamingOutput() {
-      stageList.innerHTML = "";
-      tokenStream.textContent = "";
-      answerBox.textContent = "";
-      referenceBox.innerHTML = "";
-    }
+    function _tickTypewriter() {
+      let anyWork = false;
 
-    function appendStage(title, description) {
-      const li = document.createElement("li");
-      const strong = document.createElement("strong");
-      strong.textContent = title || "Stage";
-      const p = document.createElement("div");
-      p.className = "small";
-      p.textContent = description || "";
-      li.appendChild(strong);
-      li.appendChild(p);
-      stageList.appendChild(li);
-      stageList.scrollTop = stageList.scrollHeight;
-    }
-
-    function appendToken(tok) {
-      tokenStream.textContent += tok;
-      tokenStream.scrollTop = tokenStream.scrollHeight;
-    }
-
-    function renderReferences(refs) {
-      referenceBox.innerHTML = "";
-      if (!Array.isArray(refs) || refs.length === 0) {
-        referenceBox.textContent = "No references returned.";
-        return;
-      }
-      for (const ref of refs) {
-        const span = document.createElement("span");
-        span.className = "pill";
-        span.textContent = String(ref);
-        referenceBox.appendChild(span);
-      }
-    }
-
-    function renderDataView(payload) {
-      const docs = payload.documents || [];
-      const chunks = payload.chunks || [];
-      datasetStats.textContent =
-        "User: " + payload.user_id +
-        " | Documents: " + docs.length +
-        " | Chunks: " + chunks.length;
-
-      documentsList.innerHTML = "";
-      if (docs.length === 0) {
-        documentsList.innerHTML = "<div class='small'>No documents stored yet.</div>";
-      } else {
-        for (const doc of docs) {
-          const details = document.createElement("details");
-          details.innerHTML =
-            "<summary>" + escapeHtml(doc.source_file || "unknown") +
-            " <span class='small'>(" + (doc.content_length || 0) + " chars)</span></summary>" +
-            "<div class='small'>Ingested: " + escapeHtml(doc.ingested_at || "") + "</div>" +
-            "<div class='mono' style='margin-top:8px;max-height:220px;'>" +
-            escapeHtml(doc.content || "") +
-            "</div>";
-          documentsList.appendChild(details);
-        }
-      }
-
-      chunksList.innerHTML = "";
-      if (chunks.length === 0) {
-        chunksList.innerHTML = "<div class='small'>No chunks stored yet.</div>";
-      } else {
-        for (const chunk of chunks) {
-          const metaParts = [];
-          const meta = chunk.metadata || {};
-          for (const key of Object.keys(meta)) {
-            metaParts.push(
-              "<span class='pill'>" +
-              escapeHtml(key) +
-              ": " +
-              escapeHtml(meta[key]) +
-              "</span>"
-            );
+      // 1) Drain step thinking buffers char-by-char
+      for (const step of steps) {
+        if (step.status !== "active") continue;
+        if (step.displayed.length < step.tokens.length) {
+          // Render up to 3 chars per tick for thinking (it's secondary)
+          const end = Math.min(step.displayed.length + 3, step.tokens.length);
+          step.displayed = step.tokens.slice(0, end);
+          const pre = step.el.querySelector(".step-thinking");
+          if (pre) {
+            pre.textContent = step.displayed;
+            pre.scrollTop = pre.scrollHeight;
           }
-
-          const details = document.createElement("details");
-          details.innerHTML =
-            "<summary>" + escapeHtml(chunk.id || "chunk") + "</summary>" +
-            "<div class='small'>" + (chunk.document_length || 0) + " chars</div>" +
-            "<div style='margin-top:6px;'>" + metaParts.join("") + "</div>" +
-            "<div class='mono' style='margin-top:8px;max-height:220px;'>" +
-            escapeHtml(chunk.document || "") +
-            "</div>";
-          chunksList.appendChild(details);
+          anyWork = true;
         }
       }
+
+      // 2) Drain answer buffer char-by-char
+      if (displayedAnswer.length < rawAnswerTokens.length) {
+        displayedAnswer = rawAnswerTokens.slice(0, displayedAnswer.length + 1);
+        const span = answerContent.querySelector(".answer-streaming");
+        if (span) {
+          span.textContent = displayedAnswer;
+          answerContent.scrollTop = answerContent.scrollHeight;
+        }
+        anyWork = true;
+      }
+
+      if (!anyWork && !isStreaming) stopTypewriter();
     }
 
-    async function refreshDataView() {
-      try {
-        const resp = await fetch("/ui/data", { method: "GET" });
-        const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.detail || "Could not load data");
+    /** Flush all remaining buffered text instantly (used on result/done). */
+    function flushTypewriter() {
+      stopTypewriter();
+      for (const step of steps) {
+        if (step.displayed.length < step.tokens.length) {
+          step.displayed = step.tokens;
+          const pre = step.el.querySelector(".step-thinking");
+          if (pre) pre.textContent = step.displayed;
         }
-        renderDataView(data);
-      } catch (err) {
-        datasetStats.textContent = "Failed to load dataset: " + err;
       }
+      displayedAnswer = rawAnswerTokens;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       Utilities
+       ═══════════════════════════════════════════════════════════ */
+    function esc(str) {
+      const d = document.createElement("div");
+      d.textContent = String(str);
+      return d.innerHTML;
+    }
+
+    function setStatus(el, msg, kind) {
+      el.textContent = msg || "";
+      el.className = "status-msg" + (kind ? " " + kind : "");
+    }
+
+    /** Very lightweight markdown → HTML (no external deps). */
+    function renderMarkdown(text) {
+      let html = esc(text);
+      // Code blocks (```...```)
+      html = html.replace(/```(\w*)\n([\s\S]*?)```/g,
+        (_, lang, code) => `<pre><code>${code.trim()}</code></pre>`);
+      // Inline code
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      // Bold
+      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      // Italic
+      html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+      // H4
+      html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+      // H3
+      html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+      // H2
+      html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+      // Unordered lists — collect consecutive lines
+      html = html.replace(/^[-*] (.+)$/gm, '{{LI}}$1{{/LI}}');
+      html = html.replace(/({{LI}}[\s\S]*?{{\/LI}}\n?)+/g, (block) => {
+        const items = block.replace(/{{LI}}(.*?){{\/LI}}/g, '<li>$1</li>');
+        return '<ul>' + items.trim() + '</ul>';
+      });
+      // Numbered lists
+      html = html.replace(/^\d+\. (.+)$/gm, '{{OLI}}$1{{/OLI}}');
+      html = html.replace(/({{OLI}}[\s\S]*?{{\/OLI}}\n?)+/g, (block) => {
+        const items = block.replace(/{{OLI}}(.*?){{\/OLI}}/g, '<li>$1</li>');
+        return '<ol>' + items.trim() + '</ol>';
+      });
+      // Paragraphs (double newline → paragraph break)
+      html = html.replace(/\n{2,}/g, '</p><p>');
+      html = '<p>' + html + '</p>';
+      // Clean up empty paragraphs
+      html = html.replace(/<p>\s*<\/p>/g, '');
+      return html;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       File Upload
+       ═══════════════════════════════════════════════════════════ */
+    dropZone.addEventListener("click", () => filesInput.click());
+    dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("dragover"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+      filesInput.files = e.dataTransfer.files;
+      showFileNames();
+    });
+    filesInput.addEventListener("change", showFileNames);
+
+    function showFileNames() {
+      const names = Array.from(filesInput.files || []).map(f => f.name);
+      fileNames.textContent = names.length ? names.join(", ") : "";
     }
 
     uploadForm.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const files = filesInput.files;
-      if (!files || files.length === 0) {
+      if (!filesInput.files || filesInput.files.length === 0) {
         setStatus(uploadStatus, "Select at least one file.", "err");
         return;
       }
       const fd = new FormData();
       fd.append("user_id", USER_ID);
-      for (const f of files) {
-        fd.append("files", f);
-      }
-      setStatus(uploadStatus, "Uploading and indexing...", "");
+      for (const f of filesInput.files) fd.append("files", f);
+
+      setStatus(uploadStatus, "Uploading and indexing...");
       try {
         const resp = await fetch("/ingest", { method: "POST", body: fd });
         const data = await resp.json();
-        if (!resp.ok) {
-          throw new Error(data.detail || "Upload failed");
-        }
-        setStatus(
-          uploadStatus,
-          "Uploaded. Chunks: " + data.total_chunks + ", Images: " + data.total_images_saved,
-          "ok"
-        );
+        if (!resp.ok) throw new Error(data.detail || "Upload failed");
+        setStatus(uploadStatus,
+          `Uploaded. Chunks: ${data.total_chunks}, Images: ${data.total_images_saved}`, "ok");
         filesInput.value = "";
-        await refreshDataView();
+        fileNames.textContent = "";
+        refreshDataView();
       } catch (err) {
         setStatus(uploadStatus, "Upload failed: " + err, "err");
       }
     });
 
+    /* ═══════════════════════════════════════════════════════════
+       Step Management
+       ═══════════════════════════════════════════════════════════ */
+
+    /** Build the DOM element for a step. */
+    function createStepEl(step) {
+      const div = document.createElement("div");
+      div.className = "step";
+      div.dataset.status = step.status;
+      div.dataset.stepId = step.id;
+
+      const checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      const chevronSvg = '<svg class="step-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+
+      div.innerHTML = `
+        <div class="step-dot">${step.status === "done" ? checkSvg : ""}</div>
+        <div class="step-body">
+          <div class="step-header">
+            <div class="step-info">
+              <span class="step-title">${esc(step.title)}</span>
+              <span class="step-desc">${step.desc ? esc(step.desc) : ""}</span>
+            </div>
+            ${chevronSvg}
+          </div>
+          <div class="step-detail">
+            <pre class="step-thinking"></pre>
+          </div>
+        </div>`;
+
+      div.querySelector(".step-header").addEventListener("click", () => {
+        div.classList.toggle("expanded");
+      });
+
+      step.el = div;
+      return div;
+    }
+
+    /** Add a new active step (from step_start event). */
+    function addStep(node) {
+      const step = {
+        id: ++stepIdCounter,
+        node,
+        title: NODE_LABELS[node] || node.replace(/_/g, " "),
+        desc: "",
+        tokens: "",
+        displayed: "",
+        status: "active",
+        el: null,
+      };
+      steps.push(step);
+      const el = createStepEl(step);
+      timeline.appendChild(el);
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      startTypewriter();
+    }
+
+    /** Find the most recent active step for a given node. */
+    function findActiveStep(node) {
+      for (let i = steps.length - 1; i >= 0; i--) {
+        if (steps[i].node === node && steps[i].status === "active") return steps[i];
+      }
+      return null;
+    }
+
+    /** Buffer a token to the correct step (typewriter renders it). */
+    function appendTokenToStep(node, content) {
+      let step = findActiveStep(node);
+      if (!step) {
+        addStep(node);
+        step = steps[steps.length - 1];
+      }
+      step.tokens += content;
+      startTypewriter();
+    }
+
+    /** Mark a step as done (from stage event). */
+    function completeStep(node, title, desc) {
+      let step = findActiveStep(node);
+      if (!step) {
+        // No active step — create one directly as done (non-LLM nodes)
+        const s = {
+          id: ++stepIdCounter,
+          node, title, desc,
+          tokens: "",
+          displayed: "",
+          status: "done",
+          el: null,
+        };
+        steps.push(s);
+        const el = createStepEl(s);
+        timeline.appendChild(el);
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        return;
+      }
+      // Flush any remaining buffered text for this step instantly
+      step.displayed = step.tokens;
+      const pre = step.el.querySelector(".step-thinking");
+      if (pre) pre.textContent = step.displayed;
+      step.status = "done";
+      step.title = title;
+      step.desc = desc;
+      step.el.dataset.status = "done";
+      // Update DOM
+      const checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      step.el.querySelector(".step-dot").innerHTML = checkSvg;
+      step.el.querySelector(".step-title").textContent = title;
+      step.el.querySelector(".step-desc").textContent = desc;
+      // Collapse thinking for done steps
+      step.el.classList.remove("expanded");
+    }
+
+    /** Buffer answer token (typewriter renders it). */
+    function appendToAnswer(content) {
+      if (answerSection.hidden) {
+        answerSection.hidden = false;
+        answerContent.innerHTML = '<span class="answer-streaming typing-cursor"></span>';
+      }
+      rawAnswerTokens += content;
+      startTypewriter();
+    }
+
+    /** Show the final result. */
+    function showResult(evt) {
+      // Flush typewriter and render final formatted answer
+      flushTypewriter();
+      const answer = evt.answer || rawAnswerTokens || "";
+      answerContent.innerHTML = renderMarkdown(answer);
+      answerSection.hidden = false;
+
+      // References
+      const refs = evt.references || [];
+      if (refs.length) {
+        refsSection.hidden = false;
+        referenceBox.innerHTML = refs.map(r =>
+          `<span class="ref-pill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            ${esc(r)}
+          </span>`
+        ).join("");
+      }
+
+      // RAGAS scores
+      const scores = evt.ragas_scores || {};
+      const scoreKeys = Object.keys(scores);
+      if (scoreKeys.length) {
+        scoresSection.hidden = false;
+        scoresBox.innerHTML = scoreKeys.map(k => {
+          const v = scores[k];
+          const cls = v >= 0.7 ? "score-good" : v >= 0.4 ? "score-mid" : "score-low";
+          const label = k.replace(/_/g, " ");
+          return `<div class="score-card">
+            <div class="score-name">${esc(label)}</div>
+            <div class="score-value ${cls}">${v.toFixed(2)}</div>
+          </div>`;
+        }).join("");
+      }
+
+      // Meta details
+      const metaParts = [];
+      if (evt.optimized_query) metaParts.push(["Optimized Query", evt.optimized_query]);
+      if (evt.keywords?.length) metaParts.push(["Keywords", evt.keywords.join(", ")]);
+      if (evt.iterations != null) metaParts.push(["Iterations", evt.iterations]);
+      if (evt.search_queries_tried?.length)
+        metaParts.push(["Queries Tried", evt.search_queries_tried.join(" → ")]);
+      if (metaParts.length) {
+        metaSection.hidden = false;
+        metaContent.innerHTML = metaParts.map(([k, v]) =>
+          `<div class="meta-row"><span class="meta-key">${esc(k)}</span><span>${esc(v)}</span></div>`
+        ).join("");
+      }
+    }
+
+    /** Mark pipeline as finished. */
+    function finishPipeline() {
+      isStreaming = false;
+      flushTypewriter();
+      processBadge.hidden = true;
+      setStatus(queryStatus, "Query complete.", "ok");
+    }
+
+    /** Show a pipeline error. */
+    function showError(detail) {
+      isStreaming = false;
+      processBadge.hidden = true;
+      setStatus(queryStatus, "Error: " + detail, "err");
+      // Add error step
+      const s = {
+        id: ++stepIdCounter,
+        node: "error",
+        title: "Pipeline Error",
+        desc: detail,
+        tokens: "",
+        status: "error",
+        el: null,
+      };
+      steps.push(s);
+      const el = createStepEl(s);
+      el.dataset.status = "error";
+      timeline.appendChild(el);
+    }
+
+    /** Clear all pipeline output. */
+    function clearPipeline() {
+      stopTypewriter();
+      steps = [];
+      rawAnswerTokens = "";
+      displayedAnswer = "";
+      stepIdCounter = 0;
+      timeline.innerHTML = "";
+      answerSection.hidden = true;
+      answerContent.innerHTML = "";
+      refsSection.hidden = true;
+      referenceBox.innerHTML = "";
+      scoresSection.hidden = true;
+      scoresBox.innerHTML = "";
+      metaSection.hidden = true;
+      metaContent.innerHTML = "";
+      pipeContent.hidden = true;
+      emptyState.style.display = "";
+      processBadge.hidden = true;
+      setStatus(queryStatus, "");
+    }
+
+    clearBtn.addEventListener("click", clearPipeline);
+
+    /* ═══════════════════════════════════════════════════════════
+       SSE Event Handler
+       ═══════════════════════════════════════════════════════════ */
+    function handleEvent(evt) {
+      switch (evt.type) {
+        case "step_start":
+          addStep(evt.node);
+          break;
+        case "token":
+          appendTokenToStep(evt.node, evt.content || "");
+          if (evt.node === "generate") appendToAnswer(evt.content || "");
+          break;
+        case "stage":
+          completeStep(evt.node, evt.title || evt.node, evt.description || "");
+          break;
+        case "result":
+          showResult(evt);
+          break;
+        case "done":
+          finishPipeline();
+          break;
+        case "error":
+          showError(evt.detail || "Unknown error");
+          break;
+      }
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       Query Submission (SSE Streaming)
+       ═══════════════════════════════════════════════════════════ */
     queryForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const question = questionInput.value.trim();
-      const maxIterations = Number(maxIterationsInput.value || "3");
-      if (!question) {
-        setStatus(queryStatus, "Enter a question.", "err");
-        return;
-      }
+      const maxIter = Number(maxIterInput.value || "3");
+      if (!question) { setStatus(queryStatus, "Enter a question.", "err"); return; }
 
-      clearStreamingOutput();
-      setStatus(queryStatus, "Running query with live stream...", "");
+      // Reset UI
+      clearPipeline();
+      emptyState.style.display = "none";
+      pipeContent.hidden = false;
+      processBadge.hidden = false;
+      isStreaming = true;
+      setStatus(queryStatus, "Pipeline running...");
 
       const payload = {
         user_id: USER_ID,
         question,
-        max_iterations: Math.max(1, Math.min(5, maxIterations)),
+        max_iterations: Math.max(1, Math.min(5, maxIter)),
       };
 
       try {
@@ -504,48 +1417,107 @@
 
         while (true) {
           const { value, done } = await reader.read();
-          if (done) {
-            break;
-          }
-
+          if (done) break;
           buffer += decoder.decode(value, { stream: true });
           const frames = buffer.split("\n\n");
           buffer = frames.pop() || "";
 
           for (const frame of frames) {
-            const line = frame.split("\n").find((l) => l.startsWith("data: "));
-            if (!line) {
-              continue;
-            }
-            let event;
+            const line = frame.split("\n").find(l => l.startsWith("data: "));
+            if (!line) continue;
             try {
-              event = JSON.parse(line.slice(6));
-            } catch {
-              continue;
-            }
-
-            if (event.type === "stage") {
-              appendStage(event.title, event.description);
-            } else if (event.type === "token") {
-              appendToken(event.content || "");
-            } else if (event.type === "result") {
-              answerBox.textContent = event.answer || "";
-              renderReferences(event.references || []);
-            } else if (event.type === "error") {
-              setStatus(queryStatus, "Query error: " + (event.detail || "unknown"), "err");
-            } else if (event.type === "done") {
-              setStatus(queryStatus, "Query complete.", "ok");
-            }
+              handleEvent(JSON.parse(line.slice(6)));
+            } catch { /* skip malformed frames */ }
           }
         }
+
+        // If stream ended without a done event
+        if (isStreaming) finishPipeline();
       } catch (err) {
-        setStatus(queryStatus, "Query failed: " + err, "err");
+        showError(String(err));
       }
     });
 
-    clearOutput.addEventListener("click", clearStreamingOutput);
-    refreshDataBtn.addEventListener("click", refreshDataView);
+    /* ═══════════════════════════════════════════════════════════
+       Data View
+       ═══════════════════════════════════════════════════════════ */
+    // Tabs
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.tab + "Tab").classList.add("active");
+      });
+    });
 
+    async function refreshDataView() {
+      try {
+        const resp = await fetch("/ui/data");
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "Could not load data");
+        renderDataView(data);
+      } catch (err) {
+        datasetStats.textContent = "Failed to load: " + err;
+      }
+    }
+
+    function renderDataView(payload) {
+      const docs = payload.documents || [];
+      const chunks = payload.chunks || [];
+      datasetStats.textContent =
+        `User: ${payload.user_id} · Documents: ${docs.length} · Chunks: ${chunks.length}`;
+
+      // Documents
+      if (docs.length === 0) {
+        documentsList.innerHTML = '<div class="data-empty">No documents stored yet.</div>';
+      } else {
+        documentsList.innerHTML = docs.map(doc => `
+          <details class="data-item">
+            <summary>
+              <span>${esc(doc.source_file || "unknown")}
+                <span style="font-weight:400;color:var(--ink-3);font-size:0.82rem;margin-left:8px">${(doc.content_length || 0).toLocaleString()} chars</span>
+              </span>
+            </summary>
+            <div class="data-item-body">
+              <div style="font-size:0.82rem;color:var(--ink-3);margin-bottom:8px">Ingested: ${esc(doc.ingested_at || "")}</div>
+              <div class="data-preview">${esc(doc.content || "")}</div>
+            </div>
+          </details>
+        `).join("");
+      }
+
+      // Chunks
+      if (chunks.length === 0) {
+        chunksList.innerHTML = '<div class="data-empty">No chunks stored yet.</div>';
+      } else {
+        chunksList.innerHTML = chunks.map(chunk => {
+          const meta = chunk.metadata || {};
+          const pills = Object.entries(meta)
+            .map(([k, v]) => `<span class="data-pill">${esc(k)}: ${esc(v)}</span>`)
+            .join("");
+          return `
+            <details class="data-item">
+              <summary>
+                <span>${esc(chunk.id || "chunk")}
+                  <span style="font-weight:400;color:var(--ink-3);font-size:0.82rem;margin-left:8px">${(chunk.document_length || 0).toLocaleString()} chars</span>
+                </span>
+              </summary>
+              <div class="data-item-body">
+                <div class="data-meta">${pills}</div>
+                <div class="data-preview">${esc(chunk.document || "")}</div>
+              </div>
+            </details>
+          `;
+        }).join("");
+      }
+    }
+
+    refreshBtn.addEventListener("click", refreshDataView);
+
+    /* ═══════════════════════════════════════════════════════════
+       Init
+       ═══════════════════════════════════════════════════════════ */
     refreshDataView();
   </script>
 </body>

@@ -90,9 +90,7 @@ class BM25CorpusStore:
     def _migrate_schema(self, conn: sqlite3.Connection) -> None:
         bm25_columns = self._table_columns(conn, "bm25_corpus")
         if "user_id" not in bm25_columns:
-            conn.execute(
-                "ALTER TABLE bm25_corpus ADD COLUMN user_id TEXT NOT NULL DEFAULT ''"
-            )
+            conn.execute("ALTER TABLE bm25_corpus ADD COLUMN user_id TEXT NOT NULL DEFAULT ''")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_bm25_user ON bm25_corpus (user_id)")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_bm25_user_source ON bm25_corpus (user_id, source_file)"

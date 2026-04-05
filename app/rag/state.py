@@ -36,7 +36,7 @@ class RAGState(TypedDict, total=False):
     top_k: int  # LLM-estimated chunks per pass (clamped 3-20)
     # Intermediate results from the two parallel retrieve branches:
     semantic_chunks: list[dict[str, Any]]  # raw results from retrieve_semantic_node
-    bm25_chunks: list[dict[str, Any]]      # raw results from retrieve_bm25_node
+    bm25_chunks: list[dict[str, Any]]  # raw results from retrieve_bm25_node
     retrieved_chunks: list[dict[str, Any]]  # chunks for CURRENT iteration (merged)
     all_chunk_ids: list[str]  # dedup across all iterations
     all_retrieved_chunks: list[dict[str, Any]]  # all unique chunks across all iterations

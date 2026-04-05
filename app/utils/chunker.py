@@ -27,6 +27,7 @@ from uuid import uuid4
 from app.core import SETTING
 from app.llm.base import BaseLLM
 from app.utils.pdf_processor import (
+    BBox,
     BlockType,
     ImageBlock,
     OrderedPDFDocument,
@@ -107,6 +108,57 @@ class DocumentChunker:
     # ------------------------------------------------------------------
     # Public: per-block chunkers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _merge_bboxes(bboxes: list[BBox]) -> BBox:
+        """Return the bounding box that encloses all input boxes."""
+        if not bboxes:
+            return (0.0, 0.0, 0.0, 0.0)
+        x0 = min(b[0] for b in bboxes)
+        y0 = min(b[1] for b in bboxes)
+        x1 = max(b[2] for b in bboxes)
+        y1 = max(b[3] for b in bboxes)
+        return (x0, y0, x1, y1)
+
+    def chunk_text_blocks(self, blocks: list[TextBlock], source: str) -> list[Chunk]:
+        """Merge consecutive TextBlocks and split them into larger chunks.
+
+        This avoids generating many tiny chunks when PDF extraction emits
+        line/paragraph-level text blocks.
+        """
+        if not blocks:
+            return []
+
+        merged_text = "\n\n".join(b.content.strip() for b in blocks if b.content.strip())
+        if not merged_text:
+            return []
+
+        merged_bbox = self._merge_bboxes([b.bbox for b in blocks])
+        splits = self._split_text(merged_text)
+
+        first_order = blocks[0].order
+        last_order = blocks[-1].order
+        page_number = blocks[0].page_number
+
+        return [
+            Chunk(
+                id=str(uuid4()),
+                content=text,
+                chunk_type=ChunkType.TEXT,
+                metadata={
+                    "source_file": source,
+                    "page_number": page_number,
+                    "block_order": first_order,
+                    "block_order_start": first_order,
+                    "block_order_end": last_order,
+                    "bbox": merged_bbox,
+                    "block_type": BlockType.TEXT.value,
+                    "char_start": char_start,
+                },
+            )
+            for text, char_start in splits
+            if text.strip()
+        ]
 
     def chunk_text_block(self, block: TextBlock, source: str) -> list[Chunk]:
         """Split a TextBlock into overlapping character chunks."""
@@ -221,21 +273,33 @@ class DocumentChunker:
         for page in doc.pages:
             # Collect image coroutines so we can gather them concurrently
             image_tasks: list[tuple[int, asyncio.Task[list[Chunk]]]] = []
+            text_run: list[TextBlock] = []
 
             # Process non-image blocks immediately; schedule image tasks
             page_text_table_chunks: list[tuple[int, list[Chunk]]] = []
+
+            def flush_text_run() -> None:
+                if not text_run:
+                    return
+                page_text_table_chunks.append(
+                    (text_run[0].order, self.chunk_text_blocks(text_run, source))
+                )
+                text_run.clear()
+
             for block in page.blocks:
                 if isinstance(block, TextBlock):
-                    page_text_table_chunks.append(
-                        (block.order, self.chunk_text_block(block, source))
-                    )
+                    text_run.append(block)
                 elif isinstance(block, TableBlock):
+                    flush_text_run()
                     page_text_table_chunks.append(
                         (block.order, self.chunk_table_block(block, source))
                     )
                 elif isinstance(block, ImageBlock):
+                    flush_text_run()
                     task = asyncio.create_task(self.chunk_image_block(block, llm, source))
                     image_tasks.append((block.order, task))
+
+            flush_text_run()
 
             # Await all image tasks for this page concurrently
             image_results: list[tuple[int, list[Chunk]]] = []

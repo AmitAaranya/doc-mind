@@ -36,9 +36,7 @@ from app.utils.pdf_processor import (
 # Constants
 # ---------------------------------------------------------------------------
 
-SUPPORTED_EXTENSIONS: frozenset[str] = frozenset(
-    {".pdf", ".docx", ".doc", ".md", ".txt"}
-)
+SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".docx", ".doc", ".md", ".txt"})
 
 # Maximum characters per "virtual page" for flat-text formats (md / txt).
 # Keeps chunk sizes manageable without introducing real page boundaries.

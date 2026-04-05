@@ -48,9 +48,7 @@ class DocxProcessor:
         if not self._path.exists():
             raise FileNotFoundError(f"File not found: {self._path}")
         if self._path.suffix.lower() not in {".docx", ".doc"}:
-            raise ValueError(
-                f"Expected a .docx or .doc file, got: {self._path.suffix}"
-            )
+            raise ValueError(f"Expected a .docx or .doc file, got: {self._path.suffix}")
 
     # ------------------------------------------------------------------
     # Public API
@@ -120,9 +118,7 @@ class DocxProcessor:
 
             if tag == "p":
                 para = (
-                    document.paragraphs[para_idx]
-                    if para_idx < len(document.paragraphs)
-                    else None
+                    document.paragraphs[para_idx] if para_idx < len(document.paragraphs) else None
                 )
                 para_idx += 1
                 if para is None:
@@ -138,11 +134,7 @@ class DocxProcessor:
                 current_text_len += len(text)
 
             elif tag == "tbl":
-                tbl = (
-                    document.tables[table_idx]
-                    if table_idx < len(document.tables)
-                    else None
-                )
+                tbl = document.tables[table_idx] if table_idx < len(document.tables) else None
                 table_idx += 1
                 if tbl is None:
                     continue

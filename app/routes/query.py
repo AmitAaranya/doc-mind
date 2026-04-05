@@ -36,7 +36,7 @@ from pydantic import BaseModel, Field
 
 from app.core.logging import get_logger
 from app.rag import rag_graph
-from app.rag.nodes import clear_token_callback, set_token_callback
+from app.rag.nodes import clear_token_callback, get_current_node, set_token_callback
 from app.rag.state import StepStatus
 
 query_route = APIRouter(prefix="/query", tags=["query"])
@@ -74,7 +74,9 @@ def _sse(event: dict[str, Any]) -> str:
 #   LLM produces token → callback → queue (thread-safe) → yield SSE  (real-time)
 
 
-async def _stream_rag(question: str, user_id: str, max_iterations: int) -> AsyncGenerator[str, None]:
+async def _stream_rag(
+    question: str, user_id: str, max_iterations: int
+) -> AsyncGenerator[str, None]:
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[Any] = asyncio.Queue()
     _SENTINEL = object()
@@ -83,8 +85,18 @@ async def _stream_rag(question: str, user_id: str, max_iterations: int) -> Async
         loop.call_soon_threadsafe(queue.put_nowait, event)
 
     def _run() -> None:
-        # Each token is pushed to the queue the instant the LLM yields it
-        set_token_callback(lambda tok: _put({"type": "token", "content": tok}))
+        # Each token is pushed to the queue the instant the LLM yields it.
+        # When the active node changes, a step_start event is emitted first.
+        _last_node: list[str | None] = [None]
+
+        def _on_token(tok: str) -> None:
+            node = get_current_node()
+            if node != _last_node[0]:
+                _last_node[0] = node
+                _put({"type": "step_start", "node": node})
+            _put({"type": "token", "content": tok, "node": node})
+
+        set_token_callback(_on_token)
         accumulated: dict[str, Any] = {}
         try:
             for chunk in rag_graph.stream(
