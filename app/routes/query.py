@@ -30,7 +30,7 @@ import threading
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -47,6 +47,9 @@ logger = get_logger(__name__)
 
 
 class QueryRequest(BaseModel):
+    user_id: str = Field(
+        ..., min_length=1, description="Raw user identifier used for tenant filtering"
+    )
     question: str = Field(
         ..., min_length=3, description="Question to answer from uploaded documents"
     )
@@ -71,7 +74,7 @@ def _sse(event: dict[str, Any]) -> str:
 #   LLM produces token → callback → queue (thread-safe) → yield SSE  (real-time)
 
 
-async def _stream_rag(question: str, max_iterations: int) -> AsyncGenerator[str, None]:
+async def _stream_rag(question: str, user_id: str, max_iterations: int) -> AsyncGenerator[str, None]:
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[Any] = asyncio.Queue()
     _SENTINEL = object()
@@ -85,7 +88,7 @@ async def _stream_rag(question: str, max_iterations: int) -> AsyncGenerator[str,
         accumulated: dict[str, Any] = {}
         try:
             for chunk in rag_graph.stream(
-                {"question": question, "max_iterations": max_iterations},
+                {"question": question, "user_id": user_id, "max_iterations": max_iterations},
                 stream_mode="updates",
             ):
                 for node_name, node_output in chunk.items():
@@ -174,9 +177,18 @@ async def query_documents(request: QueryRequest) -> StreamingResponse:
     };
     ```
     """
-    logger.info("SSE query: %r (max_iter=%d)", request.question, request.max_iterations)
+    user_id = request.user_id.strip()
+    if not user_id:
+        raise HTTPException(status_code=422, detail="user_id must not be blank.")
+
+    logger.info(
+        "SSE query: user_id=%r question=%r (max_iter=%d)",
+        user_id,
+        request.question,
+        request.max_iterations,
+    )
     return StreamingResponse(
-        _stream_rag(request.question, request.max_iterations),
+        _stream_rag(request.question, user_id, request.max_iterations),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

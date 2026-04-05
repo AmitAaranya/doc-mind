@@ -323,11 +323,14 @@ def retrieve_semantic_node(state: RAGState) -> dict[str, Any]:
     """Dense-vector similarity search against ChromaDB (runs in parallel with BM25)."""
     top_k: int = state.get("top_k", 8)
     active_q, queries_tried = _active_query(state)
+    user_id = state["user_id"]
 
     query_vec = embeddings.embed_documents([active_q])[0]
     # Over-fetch so we still have top_k after the similarity cut.
     chunks: list[dict[str, Any]] = _vector_store.query(
-        query_embedding=query_vec, n_results=top_k * 2
+        query_embedding=query_vec,
+        n_results=top_k * 2,
+        where={"user_id": user_id},
     )
 
     logger.debug("Semantic search: query=%r hits=%d", active_q, len(chunks))
@@ -352,10 +355,11 @@ def retrieve_bm25_node(state: RAGState) -> dict[str, Any]:
     keywords: list[str] = state.get("keywords", [])
     top_k: int = state.get("top_k", 8)
     active_q, _ = _active_query(state)
+    user_id = state["user_id"]
 
     kw_fetch = max(3, top_k // 2)
     bm25_chunks: list[dict[str, Any]] = []
-    corpus = _bm25_corpus.get_all()
+    corpus = _bm25_corpus.get_all(user_id=user_id)
 
     if corpus and keywords:
         try:
@@ -427,7 +431,7 @@ def merge_retrieve_node(state: RAGState) -> dict[str, Any]:
             seen.add(chunk["id"])
             candidates.append(chunk)
 
-    # ── Similarity filter: keep only chunks with >50% cosine similarity ───────
+    # ── Similarity filter: keep only chunks with cosine similarity ───────
     relevant = [c for c in candidates if c.get("distance", 1.0) < _SIMILARITY_THRESHOLD]
 
     # Sort by distance ascending (most similar first) and cap at top_k
@@ -451,7 +455,7 @@ def merge_retrieve_node(state: RAGState) -> dict[str, Any]:
     discarded = len(candidates) - len(relevant)
     logger.info(
         "Merge retrieve iter=%d: semantic=%d bm25=%d candidates=%d"
-        " relevant(>50%%)=%d kept=%d discarded=%d refs=%s",
+        " relevant=%d kept=%d discarded=%d refs=%s",
         iteration,
         len(semantic_chunks),
         len(bm25_chunks),
@@ -475,7 +479,7 @@ def merge_retrieve_node(state: RAGState) -> dict[str, Any]:
             "title": "Documents Retrieved",
             "description": (
                 f"Found {len(top_chunks)} passage(s) from {doc_part} "
-                f"(semantic + BM25, >50% similarity"
+                f"(semantic + BM25"
                 + (f", {discarded} low-similarity discarded" if discarded else "")
                 + ")"
                 + (f' — "{active_q}"' if active_q else "")

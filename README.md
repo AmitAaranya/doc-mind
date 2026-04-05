@@ -67,3 +67,22 @@ docker run --rm -p 8000:8000 --env-file .env doc-mind:local
 
 - Project dependencies are managed via `pyproject.toml` + `uv.lock`.
 - Route registration is done in `app/main.py` by including `common_route` from `app/routes`.
+- Both ingest and query requests now require a raw `user_id`. Documents are stored in a shared collection/database and filtered by that `user_id` at retrieval time.
+
+## API Notes
+
+Ingest documents for a user:
+
+```bash
+curl -X POST http://localhost:8000/ingest \
+	-F 'user_id=demo-user' \
+	-F 'files=@/path/to/document.pdf'
+```
+
+Query only that user's documents:
+
+```bash
+curl -N -X POST http://localhost:8000/query \
+	-H 'Content-Type: application/json' \
+	-d '{"user_id":"demo-user","question":"What does the document say?","max_iterations":3}'
+```

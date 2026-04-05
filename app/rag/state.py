@@ -21,6 +21,7 @@ class RAGState(TypedDict, total=False):
 
     # ── Required inputs (must be present at graph invocation) ─────────────────
     question: Required[str]
+    user_id: Required[str]
     max_iterations: Required[int]
 
     # ── Stage progress (written by EVERY node, read by SSE route) ────────────

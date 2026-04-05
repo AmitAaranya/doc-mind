@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.core import SETTING
@@ -52,10 +52,22 @@ class IngestResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _save_images(doc: OrderedPDFDocument, stem: str) -> int:
+def _normalize_user_id(user_id: str) -> str:
+    normalized = user_id.strip()
+    if not normalized:
+        raise HTTPException(status_code=422, detail="user_id must not be blank.")
+    return normalized
+
+
+def _user_storage_key(user_id: str) -> str:
+    return base64.urlsafe_b64encode(user_id.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _save_images(doc: OrderedPDFDocument, user_id: str, stem: str) -> int:
     """Decode base64 image data from ImageBlocks and write files to disk.
 
-    Files are written to ``IMAGES_OUTPUT_DIR/<stem>/page_N_img_I.<ext>``.
+    Files are written to
+    ``IMAGES_OUTPUT_DIR/<encoded-user-id>/<stem>/page_N_img_I.<ext>``.
     The directory is only created when at least one image block exists.
     Returns the number of images successfully saved.
     """
@@ -69,7 +81,7 @@ def _save_images(doc: OrderedPDFDocument, stem: str) -> int:
     if not image_pairs:
         return 0
 
-    images_dir = Path(SETTING.IMAGES_OUTPUT_DIR) / stem
+    images_dir = Path(SETTING.IMAGES_OUTPUT_DIR) / _user_storage_key(user_id) / stem
     images_dir.mkdir(parents=True, exist_ok=True)
 
     saved = 0
@@ -99,6 +111,7 @@ def _sanitize_metadata(meta: dict) -> dict:
 
 async def _process_one(
     upload: UploadFile,
+    user_id: str,
 ) -> tuple[FileIngestResult | None, str | None]:
     """Process a single uploaded PDF file end-to-end.
 
@@ -132,7 +145,7 @@ async def _process_one(
 
     # ── 2. Save images to disk ─────────────────────────────────────────────
     stem = Path(filename).stem
-    images_saved = _save_images(doc, stem)
+    images_saved = _save_images(doc, user_id, stem)
 
     # ── 3. Chunk ───────────────────────────────────────────────────────────
     try:
@@ -141,6 +154,9 @@ async def _process_one(
         logger.error("Chunking failed for %s: %s", filename, exc)
         return None, f"Chunking failed: {exc}"
 
+    for chunk in chunks:
+        chunk.metadata["user_id"] = user_id
+
     if not chunks:
         return (
             FileIngestResult(filename=filename, chunks_stored=0, images_saved=images_saved),
@@ -148,7 +164,7 @@ async def _process_one(
         )
 
     # ── 3b. Inject image_path into image chunk metadata ───────────────────
-    images_dir = Path(SETTING.IMAGES_OUTPUT_DIR) / stem
+    images_dir = Path(SETTING.IMAGES_OUTPUT_DIR) / _user_storage_key(user_id) / stem
     for chunk in chunks:
         if chunk.metadata.get("block_type") == "image":
             pn = chunk.metadata["page_number"]
@@ -193,9 +209,10 @@ async def _process_one(
             if c.metadata.get("block_type") not in ("image",)
         )
         _bm25_store.upsert_document(
+            user_id=user_id,
             source_file=filename,
             content=full_content,
-            metadata={"filename": filename, "total_chunks": len(chunks)},
+            metadata={"filename": filename, "total_chunks": len(chunks), "user_id": user_id},
         )
         logger.info("BM25 corpus updated: %d chunk(s) from %s.", len(chunks), filename)
     except Exception as exc:
@@ -214,10 +231,19 @@ async def _process_one(
 
 
 @ingest_route.post("", response_model=IngestResponse, status_code=200)
-async def ingest_documents(files: Annotated[list[UploadFile], File(...)]) -> IngestResponse:
+async def ingest_documents(
+    user_id: Annotated[
+        str,
+        Form(..., min_length=1, description="Raw user identifier used for document scoping"),
+    ],
+    files: Annotated[list[UploadFile], File(...)],
+) -> IngestResponse:
     """Upload documents to be processed, chunked, embedded, and stored.
 
     Supported formats: ``.pdf``, ``.docx``, ``.doc``, ``.md``, ``.txt``
+
+    ``user_id`` is required and is stored with every chunk so future queries
+    only retrieve that user's documents.
 
     For each file the endpoint will:
 
@@ -229,6 +255,8 @@ async def ingest_documents(files: Annotated[list[UploadFile], File(...)]) -> Ing
     Returns a summary of chunks stored and images saved per file, plus any
     per-file errors that did not prevent other files from being processed.
     """
+    user_id = _normalize_user_id(user_id)
+
     if not files:
         raise HTTPException(status_code=422, detail="No files provided.")
 
@@ -250,7 +278,7 @@ async def ingest_documents(files: Annotated[list[UploadFile], File(...)]) -> Ing
     errors: dict[str, str] = {}
 
     for upload in files:
-        result, error = await _process_one(upload)
+        result, error = await _process_one(upload, user_id)
         if error:
             errors[upload.filename or "unknown"] = error
         elif result:
