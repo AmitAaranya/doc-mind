@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.core import SETTING
 from app.core.logging import get_logger
+from app.database.bm25_store import BM25CorpusStore
 from app.database.chroma import ChromaVectorStore
 from app.llm import embeddings, llm_chat
 from app.utils.chunker import DocumentChunker
@@ -25,6 +26,7 @@ logger = get_logger(__name__)
 
 _chunker = DocumentChunker()
 _vector_store = ChromaVectorStore()
+_bm25_store = BM25CorpusStore()
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +175,32 @@ async def _process_one(
     except Exception as exc:
         logger.error("Vector store write failed for %s: %s", filename, exc)
         return None, f"Vector store write failed: {exc}"
+
+    # ── 6. Upsert into BM25 corpus (SQLite) ───────────────────────────────
+    try:
+        _bm25_store.upsert(
+            [
+                {"id": c.id, "document": c.content, "metadata": _sanitize_metadata(c.metadata)}
+                for c in chunks
+            ]
+        )
+        # Assemble full document text from all text/table chunks in order, then
+        # store as a single row so the whole document is queryable without
+        # having to re-join individual chunks later.
+        full_content = "\n\n".join(
+            c.content
+            for c in chunks
+            if c.metadata.get("block_type") not in ("image",)
+        )
+        _bm25_store.upsert_document(
+            source_file=filename,
+            content=full_content,
+            metadata={"filename": filename, "total_chunks": len(chunks)},
+        )
+        logger.info("BM25 corpus updated: %d chunk(s) from %s.", len(chunks), filename)
+    except Exception as exc:
+        # Non-fatal — vector store already has the data
+        logger.warning("BM25 corpus write failed for %s: %s", filename, exc)
 
     return (
         FileIngestResult(filename=filename, chunks_stored=len(chunks), images_saved=images_saved),

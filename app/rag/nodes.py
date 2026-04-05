@@ -20,7 +20,10 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from langchain_community.retrievers import BM25Retriever
+
 from app.core.logging import get_logger
+from app.database.bm25_store import BM25CorpusStore
 from app.database.chroma import ChromaVectorStore
 from app.llm import embeddings, llm_chat
 from app.rag.state import RAGState
@@ -28,6 +31,7 @@ from app.rag.state import RAGState
 logger = get_logger(__name__)
 
 _vector_store = ChromaVectorStore()
+_bm25_corpus = BM25CorpusStore()
 
 # ── Thread-local token streaming callback ─────────────────────────────────────
 # The streaming HTTP route sets this before running the graph so that
@@ -264,63 +268,166 @@ def rewrite_query_node(state: RAGState) -> dict[str, Any]:
 
 
 # Cosine distance threshold — distance < 0.5 ↔ cosine similarity > 0.5 (>50%)
-_SIMILARITY_THRESHOLD = 0.5
+_SIMILARITY_THRESHOLD = 0.8
 
 
-def retrieve_node(state: RAGState) -> dict[str, Any]:
+# ── Node 3: dispatch_retrieve ─────────────────────────────────────────────────
+
+
+def dispatch_retrieve_node(state: RAGState) -> dict[str, Any]:
+    """Pass-through dispatcher that fans out to the parallel retrieve branches.
+
+    Acts as a single convergence point so both ``rewrite_query`` and
+    ``refine_query`` only need one outgoing edge.  The node resolves and
+    records the active query, then LangGraph fans out to
+    ``retrieve_semantic`` and ``retrieve_bm25`` in parallel.
+    """
+    active_q, queries_tried = _active_query(state)
     iteration = state.get("iteration", 0)
-    all_chunk_ids: list[str] = state.get("all_chunk_ids", [])
-    keywords: list[str] = state.get("keywords", [])
+    logger.info(
+        "Dispatch retrieve iter=%d — query: %r (mode=%s)",
+        iteration,
+        active_q,
+        state.get("search_mode", "hybrid"),
+    )
+    return {
+        "search_queries_tried": queries_tried,
+        "step": {
+            "title": "Dispatching Retrieval",
+            "description": (
+                f'Launching parallel semantic + BM25 search — "{active_q}"'
+            ),
+        },
+    }
+
+
+def _active_query(state: RAGState) -> tuple[str, list[str]]:
+    """Return (active_query, updated_queries_tried) for the current iteration."""
+    iteration = state.get("iteration", 0)
     queries_tried: list[str] = state.get("search_queries_tried", [])
-    top_k: int = state.get("top_k", 8)
-
-    # Choose which query to run this iteration
     if iteration == 0:
-        active_query = state.get("optimized_query") or state["question"]
+        query = state.get("optimized_query") or state["question"]
     else:
-        # refine_query_node appended the new query to search_queries_tried
-        active_query = (
-            queries_tried[-1] if queries_tried else state.get("optimized_query", state["question"])
+        query = queries_tried[-1] if queries_tried else state.get(
+            "optimized_query", state["question"]
         )
+    if query not in queries_tried:
+        queries_tried = queries_tried + [query]
+    return query, queries_tried
 
-    if active_query not in queries_tried:
-        queries_tried = queries_tried + [active_query]
 
-    query_vec = embeddings.embed_documents([active_query])[0]
+# ── Node 3a: retrieve_semantic ────────────────────────────────────────────────
 
-    # ── Semantic search (pure vector similarity) ──────────────────────────────
+
+def retrieve_semantic_node(state: RAGState) -> dict[str, Any]:
+    """Dense-vector similarity search against ChromaDB (runs in parallel with BM25)."""
+    top_k: int = state.get("top_k", 8)
+    active_q, queries_tried = _active_query(state)
+
+    query_vec = embeddings.embed_documents([active_q])[0]
     # Over-fetch so we still have top_k after the similarity cut.
-    semantic_chunks: list[dict[str, Any]] = _vector_store.query(
+    chunks: list[dict[str, Any]] = _vector_store.query(
         query_embedding=query_vec, n_results=top_k * 2
     )
 
-    # ── Keyword search (exact-text containment, independent of semantic) ──────
-    # Each keyword runs its own ChromaDB query; results are unioned before dedup.
-    keyword_chunks: list[dict[str, Any]] = []
-    kw_fetch = max(3, top_k // 2)  # candidates per keyword
-    for kw in keywords[:5]:
+    logger.debug("Semantic search: query=%r hits=%d", active_q, len(chunks))
+    return {
+        "semantic_chunks": chunks,
+        "search_queries_tried": queries_tried,
+        "step": {
+            "title": "Semantic Search",
+            "description": (
+                f"Vector similarity search returned {len(chunks)} candidate(s)"
+                f' — "{active_q}"'
+            ),
+        },
+    }
+
+
+# ── Node 3b: retrieve_bm25 ────────────────────────────────────────────────────
+
+
+def retrieve_bm25_node(state: RAGState) -> dict[str, Any]:
+    """BM25 keyword search over the SQLite corpus (runs in parallel with semantic)."""
+    keywords: list[str] = state.get("keywords", [])
+    top_k: int = state.get("top_k", 8)
+    active_q, _ = _active_query(state)
+
+    kw_fetch = max(3, top_k // 2)
+    bm25_chunks: list[dict[str, Any]] = []
+    corpus = _bm25_corpus.get_all()
+
+    if corpus and keywords:
         try:
-            raw = _vector_store.collection.query(
-                query_embeddings=[query_vec],
-                n_results=kw_fetch,
-                where_document={"$contains": kw},
-                include=["documents", "metadatas", "distances"],
+            bm25_query = " ".join(keywords)
+            bm25 = BM25Retriever.from_texts(
+                texts=[c["document"] for c in corpus],
+                metadatas=[{**c["metadata"], "_chunk_id": c["id"]} for c in corpus],
+                k=kw_fetch,
             )
-            keyword_chunks.extend(_chromadb_rows(raw))
+            tokens = bm25.preprocess_func(bm25_query)
+            scores = bm25.vectorizer.get_scores(tokens)
+            max_score = float(max(scores)) if len(scores) > 0 and max(scores) > 0 else 1.0
+            id_to_score = {corpus[i]["id"]: float(scores[i]) for i in range(len(corpus))}
+
+            for doc in bm25.invoke(bm25_query):
+                cid = doc.metadata.get("_chunk_id", "")
+                if not cid:
+                    continue
+                raw_score = id_to_score.get(cid, 0.0)
+                norm_score = raw_score / max_score if max_score > 0 else 0.0
+                distance = 1.0 - norm_score
+                meta = {k: v for k, v in doc.metadata.items() if k != "_chunk_id"}
+                bm25_chunks.append(
+                    {
+                        "id": cid,
+                        "document": doc.page_content,
+                        "metadata": meta,
+                        "distance": distance,
+                    }
+                )
+            logger.debug(
+                "BM25 search: corpus=%d query=%r hits=%d",
+                len(corpus),
+                bm25_query,
+                len(bm25_chunks),
+            )
         except Exception as exc:
-            logger.debug("Keyword search for %r skipped: %s", kw, exc)
+            logger.debug("BM25 search failed: %s", exc)
+
+    return {
+        "bm25_chunks": bm25_chunks,
+        "step": {
+            "title": "BM25 Search",
+            "description": (
+                f"BM25 keyword search returned {len(bm25_chunks)} candidate(s)"
+                f' — "{active_q}"'
+            ),
+        },
+    }
+
+
+# ── Node 3c: merge_retrieve ───────────────────────────────────────────────────
+
+
+def merge_retrieve_node(state: RAGState) -> dict[str, Any]:
+    """Merge, dedup, filter, and rank results from the two parallel retrieve branches."""
+    iteration = state.get("iteration", 0)
+    all_chunk_ids: list[str] = state.get("all_chunk_ids", [])
+    queries_tried: list[str] = state.get("search_queries_tried", [])
+    top_k: int = state.get("top_k", 8)
+    semantic_chunks: list[dict[str, Any]] = state.get("semantic_chunks", [])
+    bm25_chunks: list[dict[str, Any]] = state.get("bm25_chunks", [])
 
     # ── Merge & deduplicate (semantic first so lower-distance entry wins) ─────
     seen: set[str] = set(all_chunk_ids)
     candidates: list[dict[str, Any]] = []
-    for chunk in semantic_chunks + keyword_chunks:
+    for chunk in semantic_chunks + bm25_chunks:
         if chunk["id"] not in seen:
             seen.add(chunk["id"])
             candidates.append(chunk)
 
     # ── Similarity filter: keep only chunks with >50% cosine similarity ───────
-    # ChromaDB cosine distance: 0 = identical, 2 = opposite (normalised vectors)
-    # distance < 0.5  ↔  cosine_similarity > 0.5
     relevant = [c for c in candidates if c.get("distance", 1.0) < _SIMILARITY_THRESHOLD]
 
     # Sort by distance ascending (most similar first) and cap at top_k
@@ -330,7 +437,6 @@ def retrieve_node(state: RAGState) -> dict[str, Any]:
     updated_ids = all_chunk_ids + [c["id"] for c in top_chunks]
     all_retrieved_chunks = state.get("all_retrieved_chunks", []) + top_chunks
 
-    # ── Extract unique source / document names ────────────────────────────────
     references = sorted(
         {
             c["metadata"].get("source_file")
@@ -344,10 +450,11 @@ def retrieve_node(state: RAGState) -> dict[str, Any]:
 
     discarded = len(candidates) - len(relevant)
     logger.info(
-        "Retrieve iter=%d: semantic=%d keyword=%d candidates=%d relevant(>50%%)=%d kept=%d discarded=%d refs=%s",
+        "Merge retrieve iter=%d: semantic=%d bm25=%d candidates=%d"
+        " relevant(>50%%)=%d kept=%d discarded=%d refs=%s",
         iteration,
         len(semantic_chunks),
-        len(keyword_chunks),
+        len(bm25_chunks),
         len(candidates),
         len(relevant),
         len(top_chunks),
@@ -361,12 +468,14 @@ def retrieve_node(state: RAGState) -> dict[str, Any]:
         "all_chunk_ids": updated_ids,
         "all_retrieved_chunks": all_retrieved_chunks,
         "references": references,
-        "search_queries_tried": queries_tried,
+        # Clear intermediates so stale data never bleeds into the next loop
+        "semantic_chunks": [],
+        "bm25_chunks": [],
         "step": {
             "title": "Documents Retrieved",
             "description": (
                 f"Found {len(top_chunks)} passage(s) from {doc_part} "
-                f"(semantic + keyword, >50% similarity"
+                f"(semantic + BM25, >50% similarity"
                 + (f", {discarded} low-similarity discarded" if discarded else "")
                 + ")"
                 + (f' — "{active_q}"' if active_q else "")
@@ -459,6 +568,93 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
     }
 
 
+# ── Adjacent-chunk merger ─────────────────────────────────────────────────────
+
+
+def _merge_adjacent_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Re-order retrieved chunks by document position and merge adjacent ones.
+
+    Two chunks are considered *adjacent* when they originate from the same
+    source document and sit next to each other in reading order:
+
+    * **Same block** (same ``source_file`` + ``page_number`` + ``block_order``):
+      the chunks were produced by splitting one text block with overlap.
+      We remove the duplicated overlap region so the merged text is clean.
+
+    * **Consecutive blocks** (same ``source_file`` + ``page_number``,
+      ``block_order`` differs by 1): neighbouring paragraphs / sections.
+      We join them with a blank line — no overlap to strip.
+
+    All other combinations remain as independent entries.
+
+    The merged chunk inherits the lowest (most similar) distance of its parts
+    and the metadata of the first (positionally earliest) chunk.
+    """
+    if len(chunks) <= 1:
+        return chunks
+
+    def _pos(c: dict) -> tuple:
+        m = c.get("metadata", {})
+        return (
+            m.get("source_file", ""),
+            m.get("page_number", 0),
+            m.get("block_order", 0),
+            m.get("char_start", 0),
+        )
+
+    sorted_chunks = sorted(chunks, key=_pos)
+    merged: list[dict[str, Any]] = []
+    current = dict(sorted_chunks[0])  # shallow copy so we don't mutate state
+
+    for nxt in sorted_chunks[1:]:
+        cm = current.get("metadata", {})
+        nm = nxt.get("metadata", {})
+
+        same_source = cm.get("source_file") == nm.get("source_file")
+        same_page = cm.get("page_number") == nm.get("page_number")
+        same_block = cm.get("block_order") == nm.get("block_order")
+        consec_block = same_source and same_page and (
+            isinstance(cm.get("block_order"), int)
+            and isinstance(nm.get("block_order"), int)
+            and nm["block_order"] == cm["block_order"] + 1
+        )
+
+        if same_source and same_page and same_block and "char_start" in cm and "char_start" in nm:
+            # ── Same block split: remove overlapping prefix ───────────────
+            cur_text: str = current["document"]
+            nxt_text: str = nxt["document"]
+            cur_start: int = cm["char_start"]
+            nxt_start: int = nm["char_start"]
+            overlap = (cur_start + len(cur_text)) - nxt_start
+            if overlap > 0:
+                merged_text = cur_text + nxt_text[overlap:]
+            else:
+                merged_text = cur_text + " " + nxt_text
+            current = dict(current)
+            current["document"] = merged_text
+            current["distance"] = min(
+                current.get("distance", 1.0), nxt.get("distance", 1.0)
+            )
+
+        elif consec_block:
+            # ── Consecutive blocks on the same page: join with blank line ─
+            current = dict(current)
+            current["document"] = current["document"].rstrip() + "\n\n" + nxt["document"].lstrip()
+            current["distance"] = min(
+                current.get("distance", 1.0), nxt.get("distance", 1.0)
+            )
+
+        else:
+            merged.append(current)
+            current = dict(nxt)
+
+    merged.append(current)
+    logger.debug(
+        "Chunk merge: %d chunks → %d merged passages", len(chunks), len(merged)
+    )
+    return merged
+
+
 # ── Node 5: generate ─────────────────────────────────────────────────────────
 
 
@@ -476,6 +672,9 @@ def generate_node(state: RAGState) -> dict[str, Any]:
                 "description": "No passages retrieved — cannot generate an answer.",
             },
         }
+
+    # Merge adjacent / overlapping chunks before building the context prompt
+    chunks = _merge_adjacent_chunks(chunks)
 
     # Build numbered context block
     context_parts: list[str] = []

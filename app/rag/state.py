@@ -1,6 +1,6 @@
 """LangGraph state schema for the RAG pipeline."""
 
-from typing import Any, Required, TypedDict
+from typing import Annotated, Any, Required, TypedDict
 
 
 class StepStatus(TypedDict):
@@ -24,7 +24,7 @@ class RAGState(TypedDict, total=False):
     max_iterations: Required[int]
 
     # ── Stage progress (written by EVERY node, read by SSE route) ────────────
-    step: StepStatus  # {"title": "...", "description": "..."}
+    step: Annotated[StepStatus, lambda x, y: y]  # last writer wins (parallel nodes)
 
     # ── Keyword & query rewriting ─────────────────────────────────────────────
     keywords: list[str]
@@ -33,7 +33,10 @@ class RAGState(TypedDict, total=False):
 
     # ── Retrieval ─────────────────────────────────────────────────────────────
     top_k: int  # LLM-estimated chunks per pass (clamped 3-20)
-    retrieved_chunks: list[dict[str, Any]]  # chunks for CURRENT iteration
+    # Intermediate results from the two parallel retrieve branches:
+    semantic_chunks: list[dict[str, Any]]  # raw results from retrieve_semantic_node
+    bm25_chunks: list[dict[str, Any]]      # raw results from retrieve_bm25_node
+    retrieved_chunks: list[dict[str, Any]]  # chunks for CURRENT iteration (merged)
     all_chunk_ids: list[str]  # dedup across all iterations
     all_retrieved_chunks: list[dict[str, Any]]  # all unique chunks across all iterations
 
