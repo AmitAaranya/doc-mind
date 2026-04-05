@@ -1,6 +1,6 @@
-# doc-mind
+# QA Assistant
 
-Intelligent Document QA API built with FastAPI.
+AI-powered document question-answering system built with FastAPI and LangGraph. Upload PDFs, DOCX, Markdown, or plain-text files and ask natural-language questions over them. The agentic RAG pipeline combines hybrid retrieval (ChromaDB vector search + BM25 keyword search), iterative query refinement, and real-time streaming responses via Server-Sent Events. Includes built-in tools for web search, weather, and date/time queries, plus automated RAGAS evaluation for answer quality tracking.
 
 ## Prerequisites
 
@@ -54,13 +54,13 @@ App URLs:
 Build image:
 
 ```bash
-docker build -t doc-mind:local .
+docker build -t qa-assistant:local .
 ```
 
 Run container:
 
 ```bash
-docker run --rm -p 8000:8000 --env-file .env doc-mind:local
+docker run --rm -p 8000:8000 --env-file .env qa-assistant:local
 ```
 
 ## Development Notes
@@ -89,7 +89,7 @@ curl -N -X POST http://localhost:8000/query \
 
 ## Architecture
 
-Doc-Mind is an intelligent document QA system built on **FastAPI** and **LangGraph**. It ingests documents, builds a hybrid search index, and answers natural-language questions with a multi-step agentic RAG pipeline.
+QA Assistant is an intelligent document QA system built on **FastAPI** and **LangGraph**. It ingests documents, builds a hybrid search index, and answers natural-language questions with a multi-step agentic RAG pipeline.
 
 ![RAG Pipeline Graph](rag_graph.jpg)
 

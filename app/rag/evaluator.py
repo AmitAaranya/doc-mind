@@ -44,7 +44,7 @@ def _make_langchain_llm():
     class _Adapter(BaseChatModel):
         @property
         def _llm_type(self) -> str:
-            return "doc-mind-google-genai"
+            return "qa-assistant-google-genai"
 
         def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
             prompt = "\n".join(str(m.content) for m in messages)

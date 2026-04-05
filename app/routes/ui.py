@@ -24,7 +24,7 @@ def _as_str_map(meta: dict[str, Any]) -> dict[str, str]:
     return out
 
 
-@ui_route.get("/app", response_class=HTMLResponse, summary="Doc Mind web UI")
+@ui_route.get("/app", response_class=HTMLResponse, summary="QA Assistant web UI")
 async def ui_page() -> str:
     """Serve a single-page UI for upload/query/stream/data inspection."""
     return _UI_HTML_PATH.read_text(encoding="utf-8")

@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 class ChromaVectorStore(BaseVectorDB):
     """Persistent vector store backed by ChromaDB (PersistentClient)."""
 
-    def __init__(self, collection_name: str = "doc-mind", path: str | None = None) -> None:
+    def __init__(self, collection_name: str = "qa-assistant", path: str | None = None) -> None:
         self.collection_name = collection_name
         self.path = path or SETTING.CHROMA_PATH
         self._client = None

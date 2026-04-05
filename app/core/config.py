@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # ── App ──────────────────────────────────────────────────────────────────
-    APP_NAME: str = "doc-mind"
+    APP_NAME: str = "qa-assistant"
     APP_VERSION: str = "0.1.0"
     ENV: Literal["development", "staging", "production"] = "development"
     DEBUG: bool = False
