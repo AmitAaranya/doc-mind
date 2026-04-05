@@ -60,3 +60,8 @@ class RAGState(TypedDict, total=False):
 
     # ── Loop control ──────────────────────────────────────────────────────────
     iteration: int  # 0-based, incremented by refine_query_node
+
+    # ── Agent routing (set by classify_intent_node) ──────────────────────────
+    tool_name: str  # "rag" | "web_search" | "weather" | "datetime" | "general"
+    tool_input: str  # extracted parameter for the tool (e.g. location, search query)
+    tool_result: str  # raw output from tool execution

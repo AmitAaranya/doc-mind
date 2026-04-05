@@ -1408,7 +1408,13 @@
         });
         if (!resp.ok || !resp.body) {
           const data = await resp.json().catch(() => ({}));
-          throw new Error(data.detail || "Query request failed");
+          let msg = "Query request failed";
+          if (Array.isArray(data.detail)) {
+            msg = data.detail.map(e => e.msg || JSON.stringify(e)).join("; ");
+          } else if (typeof data.detail === "string") {
+            msg = data.detail;
+          }
+          throw new Error(msg);
         }
 
         const reader = resp.body.getReader();

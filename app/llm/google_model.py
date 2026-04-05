@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from typing import Any
 
 from google import genai
 from google.genai import types
@@ -165,3 +166,67 @@ class GoogleLLMModel(BaseLLM):
         except Exception as exc:
             logger.warning("LLM health check failed: %s", exc)
             return False, str(exc)
+
+    def call_tool(
+        self,
+        prompt: str,
+        tools: list[types.Tool],
+        *,
+        system_instruction: str | None = None,
+        temperature: float = 0.1,
+    ) -> dict[str, Any]:
+        """Use Gemini native function calling to pick a tool.
+
+        Returns ``{"name": "<function_name>", "args": {...}}`` for the
+        first function call the model emits.
+        """
+        contents = [
+            types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=prompt)],
+            )
+        ]
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=temperature,
+            tools=tools,
+            tool_config=types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode="ANY",
+                ),
+            ),
+            safety_settings=[
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
+                types.SafetySetting(
+                    category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    threshold=types.HarmBlockThreshold.OFF,
+                ),
+            ],
+        )
+        logger.debug("Tool call with model=%s, %d tool(s)", self.model, len(tools))
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=contents,
+            config=config,
+        )
+        # Extract the first function call from the response
+        for part in response.candidates[0].content.parts:
+            if part.function_call:
+                fc = part.function_call
+                return {
+                    "name": fc.name,
+                    "args": dict(fc.args) if fc.args else {},
+                }
+        # Fallback if model didn't produce a function call
+        return {"name": "general", "args": {}}

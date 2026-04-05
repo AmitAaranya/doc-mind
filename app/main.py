@@ -3,6 +3,7 @@ from time import perf_counter
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
@@ -81,6 +82,11 @@ def create_app() -> FastAPI:
             elapsed_ms,
         )
         return response
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        logger.warning("Validation error on %s %s: %s", request.method, request.url.path, exc.errors())
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):

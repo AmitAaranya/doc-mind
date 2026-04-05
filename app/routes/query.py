@@ -51,7 +51,7 @@ class QueryRequest(BaseModel):
         ..., min_length=1, description="Raw user identifier used for tenant filtering"
     )
     question: str = Field(
-        ..., min_length=3, description="Question to answer from uploaded documents"
+        ..., min_length=1, description="Question or message to process"
     )
     max_iterations: int = Field(
         default=3, ge=1, le=5, description="Max retrieval-refinement loop iterations (1-5)"
@@ -107,7 +107,7 @@ async def _stream_rag(
                     if node_name.startswith("__"):
                         continue
 
-                    if node_name == "generate":
+                    if node_name in ("generate", "tool_answer", "direct_answer"):
                         accumulated.update({k: v for k, v in node_output.items() if k != "answer"})
                         accumulated["answer"] = node_output.get("answer", "")
                     else:
@@ -134,6 +134,7 @@ async def _stream_rag(
                     "keywords": accumulated.get("keywords", []),
                     "iterations": accumulated.get("iteration", 0),
                     "search_queries_tried": accumulated.get("search_queries_tried", []),
+                    "tool_name": accumulated.get("tool_name", "rag"),
                 }
             )
 

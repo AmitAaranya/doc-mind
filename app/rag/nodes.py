@@ -2,6 +2,7 @@
 
 Nodes
 -----
+0. classify_intent_node     – LLM classifies query intent and routes to the right tool
 1. extract_keywords_node    – extract key terms from the raw question
 2. rewrite_query_node       – optimise query for dense-vector retrieval
 3. retrieve_node            – hybrid semantic + keyword search in ChromaDB
@@ -10,6 +11,11 @@ Nodes
 5. generate_node            – build answer from retrieved context
 6. refine_query_node        – LLM generates a targeted follow-up query and decides
                               whether to run keyword, semantic, or hybrid retrieval
+7. web_search_node          – search the internet via DuckDuckGo
+8. weather_node             – fetch current weather for a location
+9. datetime_node            – return current date/time
+10. direct_answer_node      – LLM answers general/casual questions directly
+11. tool_answer_node        – LLM generates answer from tool results
 """
 
 from __future__ import annotations
@@ -26,7 +32,23 @@ from app.core.logging import get_logger
 from app.database.bm25_store import BM25CorpusStore
 from app.database.chroma import ChromaVectorStore
 from app.llm import embeddings, llm_chat
+from app.rag.prompts import (
+    DIRECT_ANSWER_SYSTEM,
+    GENERATE_SYSTEM,
+    KEYWORDS_SYSTEM,
+    REFINE_SYSTEM,
+    REWRITE_SYSTEM,
+    SUFFICIENCY_SYSTEM,
+    TOOL_ANSWER_SYSTEM,
+)
 from app.rag.state import RAGState
+from app.rag.tools import (
+    FUNCTION_TO_TOOL,
+    get_current_datetime,
+    get_gemini_tool_declarations,
+    get_weather,
+    web_search,
+)
 
 logger = get_logger(__name__)
 
@@ -59,73 +81,6 @@ def get_current_node() -> str:
     """Return the name of the currently executing pipeline node."""
     return getattr(_tl, "current_node", "unknown")
 
-
-# ── System prompts ────────────────────────────────────────────────────────────
-
-_KEYWORDS_SYSTEM = """\
-You are a keyword-extraction and retrieval-planning expert.
-Given a user question:
-1. Extract the most important search keywords, entities, and noun phrases.
-2. Estimate how many document chunks (top_k) are needed to fully answer the question.
-
-Retrieval depth guide:
-  - Simple factual / single-concept question → top_k: 3-5
-  - Multi-part or comparative question        → top_k: 6-10
-  - Broad research / open-ended question      → top_k: 11-20
-
-Respond with ONLY a valid JSON object — no markdown, no explanation:
-{
-  "keywords": ["<term1>", "<term2>", ...],
-  "top_k": <integer between 3 and 20>,
-  "reasoning": "<one sentence why you chose this depth>"
-}\
-"""
-
-_REWRITE_SYSTEM = """\
-You are an expert at optimising questions for dense-vector semantic retrieval.
-Rewrite the given question into a concise, descriptive declarative statement that maximises
-recall against a document collection.  Expand abbreviations, add synonyms, and focus on the
-core information need.
-Return ONLY the rewritten query — no markdown, no explanation.\
-"""
-
-_GENERATE_SYSTEM = """\
-You are a precise document-analyst assistant.
-Answer the user's question based ONLY on the provided numbered context passages.
-- Be factual and comprehensive.
-- If the context is insufficient to answer fully, clearly state what is missing.
-- Do NOT include inline citations, reference numbers, or a References section.\
-"""
-
-_SUFFICIENCY_SYSTEM = """\
-You are a retrieval-quality analyst.
-Given a user question, a list of key terms, and a set of retrieved document passages,
-decide whether the retrieved context contains enough information to answer the question fully.
-
-Respond with a JSON object using EXACTLY this schema (no markdown, no extra keys):
-{
-  "sufficient": true | false,
-  "reason": "<one sentence explaining what is covered or what is still missing>",
-  "missing_aspects": ["<aspect1>", "<aspect2>"]   // empty list if sufficient
-}\
-"""
-
-_REFINE_SYSTEM = """\
-You are an expert at iterative information retrieval.
-Given the original question, the keywords identified, what is still missing, and all
-queries already tried, generate ONE new targeted search query.
-
-Also decide the best retrieval strategy for this query:
-  - "keyword"  → when the missing information requires exact term matching
-  - "semantic" → when the missing information is conceptual / paraphrased
-  - "hybrid"   → when both are needed
-
-Respond with a JSON object (no markdown, no extra keys):
-{
-  "query": "<new search query>",
-  "search_mode": "keyword" | "semantic" | "hybrid"
-}\
-"""
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -180,7 +135,7 @@ def extract_keywords_node(state: RAGState) -> dict[str, Any]:
         raw = _stream_and_collect(
             llm_chat.stream_text(
                 prompt=f"User question: {question}",
-                system_instruction=_KEYWORDS_SYSTEM,
+                system_instruction=KEYWORDS_SYSTEM,
                 temperature=0.2,
             )
         )
@@ -258,7 +213,7 @@ def rewrite_query_node(state: RAGState) -> dict[str, Any]:
     optimized_query = _stream_and_collect(
         llm_chat.stream_text(
             prompt=prompt,
-            system_instruction=_REWRITE_SYSTEM,
+            system_instruction=REWRITE_SYSTEM,
             temperature=0.3,
         )
     ).strip()
@@ -542,7 +497,7 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
     raw = _stream_and_collect(
         llm_chat.stream_text(
             prompt=prompt,
-            system_instruction=_SUFFICIENCY_SYSTEM,
+            system_instruction=SUFFICIENCY_SYSTEM,
             temperature=0.1,
         )
     )
@@ -713,7 +668,7 @@ def generate_node(state: RAGState) -> dict[str, Any]:
     answer = _stream_and_collect(
         llm_chat.stream_text(
             prompt=prompt,
-            system_instruction=_GENERATE_SYSTEM,
+            system_instruction=GENERATE_SYSTEM,
             temperature=0.4,
         )
     ).strip()
@@ -763,7 +718,7 @@ def refine_query_node(state: RAGState) -> dict[str, Any]:
     raw = _stream_and_collect(
         llm_chat.stream_text(
             prompt=prompt,
-            system_instruction=_REFINE_SYSTEM,
+            system_instruction=REFINE_SYSTEM,
             temperature=0.6,
         )
     ).strip()
@@ -805,5 +760,171 @@ def refine_query_node(state: RAGState) -> dict[str, Any]:
         "step": {
             "title": f"Search Refined (loop {iteration + 1})",
             "description": f'Switching to {mode_label} search — new query: "{new_query}"',
+        },
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Agent tool nodes — classify intent and dispatch to the right tool
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Node 0: classify_intent ──────────────────────────────────────────────────
+
+
+def classify_intent_node(state: RAGState) -> dict[str, Any]:
+    """Use Gemini native function calling to classify intent and pick a tool."""
+    set_current_node("classify_intent")
+    question = state["question"]
+
+    tool_name = "general"
+    tool_input = ""
+    fn_name = ""
+
+    try:
+        tools = get_gemini_tool_declarations()
+        result = llm_chat.call_tool(
+            prompt=question,
+            tools=tools,
+            system_instruction=(
+                "You are a document QA assistant with access to tools. "
+                "The user has uploaded documents. For ANY question that "
+                "could be answered from documents (including personal "
+                "questions like 'what is my name', 'what is my salary', "
+                "etc.), ALWAYS use search_documents. Only use "
+                "direct_answer for greetings like 'hi' or 'hello'. "
+                "Use get_current_datetime for date/time questions."
+            ),
+            temperature=0.0,
+        )
+        fn_name = result.get("name", "direct_answer")
+        args = result.get("args", {})
+        tool_name = FUNCTION_TO_TOOL.get(fn_name, "general")
+        tool_input = (
+            args.get("query", "")
+            or args.get("location", "")
+            or args.get("topic", "")
+        )
+    except Exception as exc:
+        logger.warning("Native tool call failed, defaulting to general: %s", exc)
+
+    logger.info("Intent classified (native): fn=%s → tool=%s input=%r", fn_name, tool_name, tool_input)
+    return {
+        "tool_name": tool_name,
+        "tool_input": tool_input,
+        "step": {
+            "title": "Intent Classified",
+            "description": f"Routing to: {tool_name} (via {fn_name})",
+        },
+    }
+
+
+# ── Tool execution nodes ─────────────────────────────────────────────────────
+
+
+def web_search_node(state: RAGState) -> dict[str, Any]:
+    """Execute a web search and store the raw results."""
+    set_current_node("web_search")
+    question = state["question"]
+    tool_input = state.get("tool_input", "") or question
+
+    logger.info("Web search: %r", tool_input)
+    result = web_search(tool_input, max_results=5)
+
+    return {
+        "tool_result": result,
+        "step": {
+            "title": "Web Search Complete",
+            "description": f'Searched the web for: "{tool_input}"',
+        },
+    }
+
+
+def weather_node(state: RAGState) -> dict[str, Any]:
+    """Fetch weather for the extracted location."""
+    set_current_node("weather")
+    location = state.get("tool_input", "").strip()
+    if not location:
+        # Try to extract location from the question
+        location = state["question"]
+
+    logger.info("Weather lookup: %r", location)
+    result = get_weather(location)
+
+    return {
+        "tool_result": result,
+        "step": {
+            "title": "Weather Retrieved",
+            "description": f"Fetched weather for: {location}",
+        },
+    }
+
+
+def datetime_node(state: RAGState) -> dict[str, Any]:
+    """Return the current date and time."""
+    set_current_node("datetime")
+    result = get_current_datetime()
+
+    return {
+        "tool_result": result,
+        "step": {
+            "title": "Date/Time Retrieved",
+            "description": "Fetched current date and time.",
+        },
+    }
+
+
+def tool_answer_node(state: RAGState) -> dict[str, Any]:
+    """Generate a natural-language answer from tool output using the LLM."""
+    set_current_node("tool_answer")
+    question = state["question"]
+    tool_name = state.get("tool_name", "unknown")
+    tool_result = state.get("tool_result", "")
+
+    prompt = (
+        f"User question: {question}\n\n"
+        f"Tool used: {tool_name}\n"
+        f"Tool output:\n{tool_result}\n\n"
+        "Provide a helpful answer to the user based on the tool output above."
+    )
+
+    answer = _stream_and_collect(
+        llm_chat.stream_text(
+            prompt=prompt,
+            system_instruction=TOOL_ANSWER_SYSTEM,
+            temperature=0.4,
+        )
+    ).strip()
+
+    logger.info("Tool answer generated: %d chars (tool=%s)", len(answer), tool_name)
+    return {
+        "answer": answer,
+        "references": [f"Source: {tool_name}"],
+        "step": {
+            "title": "Answer Generated",
+            "description": f"Synthesised answer from {tool_name} results.",
+        },
+    }
+
+
+def direct_answer_node(state: RAGState) -> dict[str, Any]:
+    """LLM answers general/casual questions directly without any tool."""
+    set_current_node("direct_answer")
+    question = state["question"]
+
+    answer = _stream_and_collect(
+        llm_chat.stream_text(
+            prompt=question,
+            system_instruction=DIRECT_ANSWER_SYSTEM,
+            temperature=0.7,
+        )
+    ).strip()
+
+    logger.info("Direct answer generated: %d chars", len(answer))
+    return {
+        "answer": answer,
+        "references": [],
+        "step": {
+            "title": "Answer Generated",
+            "description": "Answered directly without external tools.",
         },
     }

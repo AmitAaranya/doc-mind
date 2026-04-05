@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from typing import Any
 
 
 class BaseLLM(ABC):
@@ -23,6 +24,24 @@ class BaseLLM(ABC):
         raise NotImplementedError(
             f"{type(self).__name__} does not support image description. "
             "Override describe_image() in your LLM subclass."
+        )
+
+    def call_tool(
+        self,
+        prompt: str,
+        tools: list[Any],
+        *,
+        system_instruction: str | None = None,
+        temperature: float = 0.1,
+    ) -> dict[str, Any]:
+        """Send a prompt with tool/function declarations and return the chosen call.
+
+        Returns a dict with ``name`` (tool name) and ``args`` (dict of arguments).
+        Default implementation raises NotImplementedError.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support tool calling. "
+            "Override call_tool() in your LLM subclass."
         )
 
     @abstractmethod
