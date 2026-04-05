@@ -22,17 +22,33 @@ logger = get_logger(__name__)
 
 
 def web_search(query: str, max_results: int = 5) -> str:
-    """Run a DuckDuckGo text search and return formatted results."""
+    """Run a DuckDuckGo search (text + news fallback) and return formatted results."""
     try:
         with DDGS() as ddgs:
+            # Try text search first
             results = list(ddgs.text(query, max_results=max_results))
+
+            # Fallback to news if text returns nothing
+            if not results:
+                logger.debug("Text search empty, trying news for: %r", query)
+                try:
+                    news = list(ddgs.news(query, max_results=max_results))
+                    for n in news:
+                        results.append({
+                            "title": n.get("title", ""),
+                            "body": n.get("body", ""),
+                            "href": n.get("url", ""),
+                        })
+                except Exception:
+                    logger.debug("News fallback also failed for: %r", query)
+
         if not results:
             return "No web results found."
         lines: list[str] = []
         for i, r in enumerate(results, 1):
             title = r.get("title", "")
             body = r.get("body", "")
-            href = r.get("href", "")
+            href = r.get("href", r.get("url", ""))
             lines.append(f"[{i}] {title}\n{body}\nURL: {href}")
         return "\n\n".join(lines)
     except Exception as exc:
