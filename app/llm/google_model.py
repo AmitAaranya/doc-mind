@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from time import sleep
 from typing import Any
 
 from google import genai
@@ -9,6 +10,27 @@ from app.core.logging import get_logger
 from app.llm.base import BaseLLM
 
 logger = get_logger(__name__)
+
+_MAX_RETRIES = 3
+_RETRY_BACKOFF = (1, 3, 5)  # seconds between retries
+_RETRYABLE_CODES = {503, 429, 500}
+
+
+def _extract_status_code(exc: Exception) -> int | None:
+    """Best-effort extraction of an HTTP/gRPC status code from a Google API error."""
+    # google.api_core.exceptions.ServiceUnavailable, etc.
+    if hasattr(exc, "code"):
+        c = exc.code
+        return c if isinstance(c, int) else None
+    # google-genai wraps errors with .status_code or nested .code
+    if hasattr(exc, "status_code"):
+        return exc.status_code
+    # Fall back to string matching for "503" / "429" in the message
+    msg = str(exc)
+    for code in _RETRYABLE_CODES:
+        if str(code) in msg:
+            return code
+    return None
 
 
 class GoogleLLMModel(BaseLLM):
@@ -78,13 +100,28 @@ class GoogleLLMModel(BaseLLM):
         )
 
         logger.debug("Starting streamed generation with model=%s", self.model)
-        for chunk in self.client.models.generate_content_stream(
-            model=self.model,
-            contents=contents,
-            config=config,
-        ):
-            if chunk.text:
-                yield chunk.text
+        for attempt in range(_MAX_RETRIES):
+            try:
+                for chunk in self.client.models.generate_content_stream(
+                    model=self.model,
+                    contents=contents,
+                    config=config,
+                ):
+                    if chunk.text:
+                        yield chunk.text
+                return  # success — exit retry loop
+            except Exception as exc:
+                code = _extract_status_code(exc)
+                if code in _RETRYABLE_CODES and attempt < _MAX_RETRIES - 1:
+                    wait = _RETRY_BACKOFF[attempt]
+                    logger.warning(
+                        "Retryable error (code=%s, attempt %d/%d), "
+                        "retrying in %ds: %s",
+                        code, attempt + 1, _MAX_RETRIES, wait, exc,
+                    )
+                    sleep(wait)
+                else:
+                    raise
 
     def describe_image(self, image_b64: str, mime_type: str = "image/png") -> str:
         """Send an inline image to Gemini and return a descriptive text response.
@@ -215,11 +252,26 @@ class GoogleLLMModel(BaseLLM):
             ],
         )
         logger.debug("Tool call with model=%s, %d tool(s)", self.model, len(tools))
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=contents,
-            config=config,
-        )
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=contents,
+                    config=config,
+                )
+                break  # success
+            except Exception as exc:
+                code = _extract_status_code(exc)
+                if code in _RETRYABLE_CODES and attempt < _MAX_RETRIES - 1:
+                    wait = _RETRY_BACKOFF[attempt]
+                    logger.warning(
+                        "Retryable tool-call error (code=%s, attempt %d/%d), "
+                        "retrying in %ds: %s",
+                        code, attempt + 1, _MAX_RETRIES, wait, exc,
+                    )
+                    sleep(wait)
+                else:
+                    raise
         # Extract the first function call from the response
         for part in response.candidates[0].content.parts:
             if part.function_call:
