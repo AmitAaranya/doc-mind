@@ -748,6 +748,127 @@
       50% { box-shadow: 0 0 0 6px rgba(13,148,136,0); }
     }
 
+    /* ── Clarification Card ────────────────────────────────── */
+    .clarification-card {
+      background: linear-gradient(135deg, var(--warm-light) 0%, #fff7ed 100%);
+      border: 2px solid #fbbf24;
+      border-radius: var(--r-lg);
+      padding: 20px;
+      margin-top: 12px;
+      animation: fadeSlideIn 300ms ease-out;
+    }
+    .clarification-card[hidden] { display: none; }
+    .clarification-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .clarification-header svg {
+      width: 24px;
+      height: 24px;
+      color: #d97706;
+      flex-shrink: 0;
+    }
+    .clarification-header h3 {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 600;
+      color: #92400e;
+    }
+    .clarification-question {
+      font-size: 0.92rem;
+      color: var(--ink);
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+    .clarification-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .clarification-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #fff;
+      border: 1.5px solid #fbbf24;
+      border-radius: var(--r);
+      padding: 8px 16px;
+      font-family: var(--font);
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: #92400e;
+      cursor: pointer;
+      transition: background 150ms, border-color 150ms, transform 100ms;
+    }
+    .clarification-option:hover {
+      background: #fef3c7;
+      border-color: #d97706;
+      transform: translateY(-1px);
+    }
+    .clarification-option.selected {
+      background: #fbbf24;
+      border-color: #d97706;
+      color: #fff;
+    }
+    .clarification-input-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .clarification-input {
+      flex: 1;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r);
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 0.92rem;
+      background: #fff;
+      color: var(--ink);
+      outline: none;
+      transition: border-color 150ms, box-shadow 150ms;
+    }
+    .clarification-input:focus {
+      border-color: #d97706;
+      box-shadow: 0 0 0 3px rgba(217,119,6,0.12);
+    }
+    .clarification-submit {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      border-radius: var(--r);
+      padding: 10px 18px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.88rem;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #fff;
+      cursor: pointer;
+      transition: transform 100ms, box-shadow 150ms;
+    }
+    .clarification-submit:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(217,119,6,0.3);
+    }
+    .clarification-submit:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .clarification-submit svg { width: 16px; height: 16px; }
+    .clarification-or {
+      font-size: 0.78rem;
+      color: var(--ink-4);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 8px 0;
+      text-align: center;
+      font-weight: 600;
+    }
+
     /* ── Responsive ────────────────────────────────────────── */
     @media (max-width: 640px) {
       .page { padding: 12px 10px 40px; gap: 12px; }
@@ -852,6 +973,24 @@
         <!-- Steps Timeline -->
         <div id="timeline" class="timeline"></div>
 
+        <!-- Clarification Card (human-in-the-loop) -->
+        <div id="clarificationCard" class="clarification-card" hidden>
+          <div class="clarification-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <h3>Clarification Needed</h3>
+          </div>
+          <div id="clarificationQuestion" class="clarification-question"></div>
+          <div id="clarificationOptions" class="clarification-options"></div>
+          <div id="clarificationOrDivider" class="clarification-or" hidden>or type your own answer</div>
+          <div class="clarification-input-row">
+            <input id="clarificationInput" class="clarification-input" type="text" placeholder="Type your response..." />
+            <button id="clarificationSubmit" class="clarification-submit" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              Send
+            </button>
+          </div>
+        </div>
+
         <!-- Answer Section -->
         <div id="answerSection" class="answer-section" hidden>
           <div class="answer-divider"><span>Answer</span></div>
@@ -924,6 +1063,12 @@
     const emptyState    = document.getElementById("emptyState");
     const pipeContent   = document.getElementById("pipelineContent");
     const timeline      = document.getElementById("timeline");
+    const clarCard      = document.getElementById("clarificationCard");
+    const clarQuestion  = document.getElementById("clarificationQuestion");
+    const clarOptions   = document.getElementById("clarificationOptions");
+    const clarOrDivider = document.getElementById("clarificationOrDivider");
+    const clarInput     = document.getElementById("clarificationInput");
+    const clarSubmit    = document.getElementById("clarificationSubmit");
     const answerSection = document.getElementById("answerSection");
     const answerContent = document.getElementById("answerContent");
     const refsSection   = document.getElementById("refsSection");
@@ -943,6 +1088,8 @@
        Node labels & icons
        ═══════════════════════════════════════════════════════════ */
     const NODE_LABELS = {
+      classify_intent:   "Classifying Intent",
+      check_clarification: "Checking Clarity",
       extract_keywords:  "Extracting Keywords",
       rewrite_query:     "Optimizing Query",
       dispatch_retrieve: "Dispatching Search",
@@ -963,6 +1110,10 @@
     let displayedAnswer = ""; // what's currently rendered
     let isStreaming = false;
     let stepIdCounter = 0;
+
+    // ── Clarification state ─────────────────────────────────
+    let pendingClarification = null; // {question, options, source, originalQuestion}
+    let selectedOption = null;       // currently selected option value
 
     /* ═══════════════════════════════════════════════════════════
        Typewriter Engine
@@ -1326,6 +1477,156 @@
       timeline.appendChild(el);
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       Clarification UI (Human-in-the-Loop)
+       ═══════════════════════════════════════════════════════════ */
+
+    /** Show the clarification card with question + options. */
+    function showClarification(evt) {
+      pendingClarification = {
+        question: evt.question,
+        options: evt.options || [],
+        source: evt.source || "start",
+        originalQuestion: questionInput.value.trim(),
+      };
+      selectedOption = null;
+
+      // Populate question
+      clarQuestion.textContent = evt.question;
+
+      // Populate option buttons
+      const options = evt.options || [];
+      if (options.length > 0) {
+        clarOptions.innerHTML = options.map((opt, i) =>
+          `<button class="clarification-option" data-index="${i}" data-value="${esc(opt.value)}">${esc(opt.label)}</button>`
+        ).join("");
+        clarOrDivider.hidden = false;
+
+        // Add click listeners
+        clarOptions.querySelectorAll(".clarification-option").forEach(btn => {
+          btn.addEventListener("click", () => {
+            // Deselect others
+            clarOptions.querySelectorAll(".clarification-option").forEach(b => b.classList.remove("selected"));
+            btn.classList.add("selected");
+            selectedOption = btn.dataset.value;
+            clarInput.value = "";  // clear text input when option selected
+          });
+        });
+      } else {
+        clarOptions.innerHTML = "";
+        clarOrDivider.hidden = true;
+      }
+
+      clarInput.value = "";
+      clarCard.hidden = false;
+      processBadge.hidden = true;
+      isStreaming = false;
+      setStatus(queryStatus, "Waiting for your response...", "");
+
+      // Focus input
+      setTimeout(() => clarInput.focus(), 100);
+    }
+
+    /** Hide clarification card. */
+    function hideClarification() {
+      clarCard.hidden = true;
+      pendingClarification = null;
+      selectedOption = null;
+      clarOptions.innerHTML = "";
+      clarInput.value = "";
+    }
+
+    /** Submit the clarification response. */
+    async function submitClarification() {
+      if (!pendingClarification) return;
+
+      const response = selectedOption || clarInput.value.trim();
+      if (!response) {
+        clarInput.style.borderColor = "var(--danger)";
+        setTimeout(() => { clarInput.style.borderColor = ""; }, 1500);
+        return;
+      }
+
+      const originalQ = pendingClarification.originalQuestion;
+      hideClarification();
+
+      // Show a step indicating user responded
+      const s = {
+        id: ++stepIdCounter,
+        node: "user_response",
+        title: "User Responded",
+        desc: `"${response}"`,
+        tokens: "",
+        displayed: "",
+        status: "done",
+        el: null,
+      };
+      steps.push(s);
+      const el = createStepEl(s);
+      timeline.appendChild(el);
+
+      // Re-run the pipeline with the clarification response
+      processBadge.hidden = false;
+      isStreaming = true;
+      setStatus(queryStatus, "Pipeline resuming with your response...");
+
+      const maxIter = Number(maxIterInput.value || "3");
+      const payload = {
+        user_id: USER_ID,
+        question: originalQ,
+        max_iterations: Math.max(1, Math.min(5, maxIter)),
+        clarification_response: response,
+      };
+
+      try {
+        const resp = await fetch("/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok || !resp.body) {
+          const data = await resp.json().catch(() => ({}));
+          let msg = "Query request failed";
+          if (Array.isArray(data.detail)) {
+            msg = data.detail.map(e => e.msg || JSON.stringify(e)).join("; ");
+          } else if (typeof data.detail === "string") {
+            msg = data.detail;
+          }
+          throw new Error(msg);
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() || "";
+
+          for (const frame of frames) {
+            const line = frame.split("\n").find(l => l.startsWith("data: "));
+            if (!line) continue;
+            try {
+              handleEvent(JSON.parse(line.slice(6)));
+            } catch { /* skip malformed frames */ }
+          }
+        }
+
+        if (isStreaming) finishPipeline();
+      } catch (err) {
+        showError(String(err));
+      }
+    }
+
+    // Clarification submit events
+    clarSubmit.addEventListener("click", submitClarification);
+    clarInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); submitClarification(); }
+    });
+
     /** Clear all pipeline output. */
     function clearPipeline() {
       stopTypewriter();
@@ -1333,7 +1634,10 @@
       rawAnswerTokens = "";
       displayedAnswer = "";
       stepIdCounter = 0;
+      pendingClarification = null;
+      selectedOption = null;
       timeline.innerHTML = "";
+      hideClarification();
       answerSection.hidden = true;
       answerContent.innerHTML = "";
       refsSection.hidden = true;
@@ -1360,10 +1664,13 @@
           break;
         case "token":
           appendTokenToStep(evt.node, evt.content || "");
-          if (evt.node === "generate") appendToAnswer(evt.content || "");
+          if (evt.node === "generate" || evt.node === "tool_answer" || evt.node === "direct_answer") appendToAnswer(evt.content || "");
           break;
         case "stage":
           completeStep(evt.node, evt.title || evt.node, evt.description || "");
+          break;
+        case "clarification":
+          showClarification(evt);
           break;
         case "result":
           showResult(evt);

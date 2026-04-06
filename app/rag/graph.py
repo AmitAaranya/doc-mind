@@ -1,28 +1,35 @@
-"""LangGraph agent pipeline with tool routing.
+"""LangGraph agent pipeline with tool routing and human-in-the-loop clarification.
 
 Flow
 ----
-START ──► classify_intent ──┬──► "rag"        → [full RAG pipeline] → END
+START ──► classify_intent ──┬──► "rag"        → check_clarification ──┬──► needs_clarification? YES → END (sends clarification to user)
+                            │                                          └──► needs_clarification? NO  → [full RAG pipeline]
                             ├──► "web_search"  → web_search → tool_answer → END
                             ├──► "weather"     → weather → tool_answer → END
                             ├──► "datetime"    → datetime → tool_answer → END
                             └──► "general"     → direct_answer → END
 
-RAG sub-pipeline (unchanged)
-----------------------------
-  extract_keywords ──► rewrite_query ──► dispatch_retrieve ──► retrieve_semantic ──┐
-                                                ▲                                   ├──► merge_retrieve ──► check_sufficiency
-                                                │               ──► retrieve_bm25  ──┘              │
-                                           refine_query ◄──────────────────────────────────── sufficient? NO
-                                                                                                    │
-                                                                                               sufficient? YES
-                                                                                                    │
-                                                                                                    ▼
-                                                                                               generate ──► evaluate ──► END
+Clarification can happen at **two** points:
+  1. **At start** (check_clarification) — the question is too vague to even begin retrieval
+  2. **At sufficiency** (check_sufficiency) — retrieved context reveals ambiguity
 
-The agent classifies user intent first and routes to the appropriate tool.
-If the query is about uploaded documents, the full RAG pipeline runs as before.
-For web search, weather, date/time, or general queries, a specialised tool handles it.
+When the user responds, the frontend re-invokes the pipeline with
+``clarification_response`` set.  The pipeline merges the response into the
+question and reruns from the appropriate point.
+
+RAG sub-pipeline
+----------------
+  extract_keywords → rewrite_query → dispatch_retrieve → retrieve_semantic ──┐
+                                            ▲                                 ├─► merge_retrieve → check_sufficiency
+                                            │              retrieve_bm25 ────┘         │
+                                       refine_query ◄─────────────────────────── sufficient? NO (& no clarification)
+                                                                                       │
+                                                                              needs_clarification? YES → END
+                                                                                       │
+                                                                                  sufficient? YES
+                                                                                       │
+                                                                                       ▼
+                                                                                  generate → evaluate → END
 """
 
 from __future__ import annotations
@@ -35,6 +42,7 @@ from PIL import Image
 from app.core.logging import get_logger
 from app.rag.evaluator import evaluate_node
 from app.rag.nodes import (
+    check_clarification_node,
     check_sufficiency_node,
     classify_intent_node,
     datetime_node,
@@ -66,8 +74,20 @@ def _route_by_tool(state: RAGState) -> str:
     return tool
 
 
+def _decide_after_clarification(state: RAGState) -> str:
+    """After check_clarification: pause for user input or continue the RAG pipeline."""
+    if state.get("needs_clarification", False):
+        logger.info("Clarification needed — pausing pipeline for user input.")
+        return "needs_clarification"
+    logger.info("No clarification needed — proceeding to extract_keywords.")
+    return "proceed"
+
+
 def _decide_after_sufficiency(state: RAGState) -> str:
-    """After check_sufficiency: loop back to retrieve or proceed to generate."""
+    """After check_sufficiency: loop back, ask user, or proceed to generate."""
+    if state.get("needs_clarification", False):
+        logger.info("Sufficiency check → clarification needed — pausing for user input.")
+        return "clarify"
     if state.get("is_sufficient", False):
         logger.info("Context sufficient – proceeding to generate.")
         return "generate"
@@ -91,7 +111,8 @@ def build_rag_graph():
     workflow.add_node("tool_answer", tool_answer_node)
     workflow.add_node("direct_answer", direct_answer_node)
 
-    # ── RAG pipeline nodes (unchanged) ────────────────────────────────────────
+    # ── RAG pipeline nodes ──────────────────────────────────────────────────
+    workflow.add_node("check_clarification", check_clarification_node)
     workflow.add_node("extract_keywords", extract_keywords_node)
     workflow.add_node("rewrite_query", rewrite_query_node)
     workflow.add_node("dispatch_retrieve", dispatch_retrieve_node)
@@ -111,7 +132,7 @@ def build_rag_graph():
         "classify_intent",
         _route_by_tool,
         {
-            "rag": "extract_keywords",
+            "rag": "check_clarification",
             "web_search": "web_search",
             "weather": "weather",
             "datetime": "datetime",
@@ -126,7 +147,17 @@ def build_rag_graph():
     workflow.add_edge("tool_answer", END)
     workflow.add_edge("direct_answer", END)
 
-    # ── RAG pipeline edges (unchanged) ────────────────────────────────────────
+    # ── Clarification gate: ask user or proceed to RAG ────────────────────────
+    workflow.add_conditional_edges(
+        "check_clarification",
+        _decide_after_clarification,
+        {
+            "needs_clarification": END,  # pipeline pauses; UI shows clarification
+            "proceed": "extract_keywords",  # question is clear; continue RAG
+        },
+    )
+
+    # ── RAG pipeline edges ────────────────────────────────────────────────────
     workflow.add_edge("extract_keywords", "rewrite_query")
     workflow.add_edge("rewrite_query", "dispatch_retrieve")
     workflow.add_edge("dispatch_retrieve", "retrieve_semantic")
@@ -135,13 +166,14 @@ def build_rag_graph():
     workflow.add_edge("retrieve_bm25", "merge_retrieve")
     workflow.add_edge("merge_retrieve", "check_sufficiency")
 
-    # Conditional edge: check_sufficiency gates the loop
+    # Conditional edge: check_sufficiency gates the loop (3-way)
     workflow.add_conditional_edges(
         "check_sufficiency",
         _decide_after_sufficiency,
         {
-            "refine": "refine_query",  # missing context → loop
-            "generate": "generate",  # context is enough → answer
+            "refine": "refine_query",       # missing context → loop
+            "generate": "generate",          # context is enough → answer
+            "clarify": END,                  # ambiguity detected → ask user
         },
     )
 

@@ -13,13 +13,14 @@ real time, not batched at node completion.
 
 SSE event shapes
 ----------------
-  stage  : {"type":"stage",  "node":"<id>", "title":"<str>", "description":"<str>"}
-  token  : {"type":"token",  "content":"<str>"}   ← every LLM token, every node, real-time
-  result : {"type":"result", "answer":"...", "references":[...], "ragas_scores":{...},
-             "optimized_query":"...", "keywords":[...], "iterations":N,
-             "search_queries_tried":[...]}
-  done   : {"type":"done"}
-  error  : {"type":"error",  "detail":"<str>"}
+  stage         : {"type":"stage",  "node":"<id>", "title":"<str>", "description":"<str>"}
+  token         : {"type":"token",  "content":"<str>"}   ← every LLM token, every node, real-time
+  clarification : {"type":"clarification", "question":"<str>", "options":[{"label":"..","value":".."}]}
+  result        : {"type":"result", "answer":"...", "references":[...], "ragas_scores":{...},
+                    "optimized_query":"...", "keywords":[...], "iterations":N,
+                    "search_queries_tried":[...]}
+  done          : {"type":"done"}
+  error         : {"type":"error",  "detail":"<str>"}
 """
 
 from __future__ import annotations
@@ -56,6 +57,11 @@ class QueryRequest(BaseModel):
     max_iterations: int = Field(
         default=3, ge=1, le=5, description="Max retrieval-refinement loop iterations (1-5)"
     )
+    clarification_response: str | None = Field(
+        default=None,
+        description="User's response to a previous clarification request. "
+        "When set, the pipeline skips the clarification check and enriches the question.",
+    )
 
 
 # ── SSE helper ────────────────────────────────────────────────────────────────
@@ -75,7 +81,7 @@ def _sse(event: dict[str, Any]) -> str:
 
 
 async def _stream_rag(
-    question: str, user_id: str, max_iterations: int
+    question: str, user_id: str, max_iterations: int, clarification_response: str | None = None,
 ) -> AsyncGenerator[str, None]:
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[Any] = asyncio.Queue()
@@ -98,9 +104,18 @@ async def _stream_rag(
 
         set_token_callback(_on_token)
         accumulated: dict[str, Any] = {}
+
+        graph_input: dict[str, Any] = {
+            "question": question,
+            "user_id": user_id,
+            "max_iterations": max_iterations,
+        }
+        if clarification_response:
+            graph_input["clarification_response"] = clarification_response
+
         try:
             for chunk in rag_graph.stream(
-                {"question": question, "user_id": user_id, "max_iterations": max_iterations},
+                graph_input,
                 stream_mode="updates",
             ):
                 for node_name, node_output in chunk.items():
@@ -124,19 +139,34 @@ async def _stream_rag(
                         }
                     )
 
-            _put(
-                {
-                    "type": "result",
-                    "answer": accumulated.get("answer", ""),
-                    "references": accumulated.get("references", []),
-                    "ragas_scores": accumulated.get("ragas_scores", {}),
-                    "optimized_query": accumulated.get("optimized_query", ""),
-                    "keywords": accumulated.get("keywords", []),
-                    "iterations": accumulated.get("iteration", 0),
-                    "search_queries_tried": accumulated.get("search_queries_tried", []),
-                    "tool_name": accumulated.get("tool_name", "rag"),
-                }
-            )
+                    # Emit a clarification event when the pipeline pauses for user input
+                    if node_output.get("needs_clarification"):
+                        _put(
+                            {
+                                "type": "clarification",
+                                "question": node_output.get("clarification_question", ""),
+                                "options": node_output.get("clarification_options", []),
+                                "source": node_output.get("clarification_source", "start"),
+                            }
+                        )
+
+            # If the pipeline ended with a clarification request, don't send a result event
+            if accumulated.get("needs_clarification"):
+                pass  # client will handle the clarification event
+            else:
+                _put(
+                    {
+                        "type": "result",
+                        "answer": accumulated.get("answer", ""),
+                        "references": accumulated.get("references", []),
+                        "ragas_scores": accumulated.get("ragas_scores", {}),
+                        "optimized_query": accumulated.get("optimized_query", ""),
+                        "keywords": accumulated.get("keywords", []),
+                        "iterations": accumulated.get("iteration", 0),
+                        "search_queries_tried": accumulated.get("search_queries_tried", []),
+                        "tool_name": accumulated.get("tool_name", "rag"),
+                    }
+                )
 
         except Exception as exc:
             logger.exception("RAG pipeline error: %s", exc)
@@ -170,13 +200,14 @@ async def query_documents(request: QueryRequest) -> StreamingResponse:
 
     **Event stream protocol** (`text/event-stream`):
 
-    | `type`   | Fields                                             | When                         |
-    |----------|----------------------------------------------------|------------------------------|
-    | `stage`  | `node`, `title`, `description`                     | After each pipeline node     |
-    | `token`  | `content`                                          | Each LLM token while writing |
-    | `result` | `answer`, `references`, `ragas_scores`, `keywords` | Pipeline complete            |
-    | `done`   | —                                                  | Stream closed                |
-    | `error`  | `detail`                                           | On failure                   |
+    | `type`          | Fields                                             | When                              |
+    |-----------------|----------------------------------------------------|---------------------------------  |
+    | `stage`         | `node`, `title`, `description`                     | After each pipeline node          |
+    | `token`         | `content`                                          | Each LLM token while writing      |
+    | `clarification` | `question`, `options`, `source`                    | Pipeline needs user input         |
+    | `result`        | `answer`, `references`, `ragas_scores`, `keywords` | Pipeline complete                 |
+    | `done`          | —                                                  | Stream closed                     |
+    | `error`         | `detail`                                           | On failure                        |
 
     **JavaScript example:**
     ```js
@@ -195,13 +226,19 @@ async def query_documents(request: QueryRequest) -> StreamingResponse:
         raise HTTPException(status_code=422, detail="user_id must not be blank.")
 
     logger.info(
-        "SSE query: user_id=%r question=%r (max_iter=%d)",
+        "SSE query: user_id=%r question=%r (max_iter=%d, clarification=%r)",
         user_id,
         request.question,
         request.max_iterations,
+        request.clarification_response,
     )
     return StreamingResponse(
-        _stream_rag(request.question, user_id, request.max_iterations),
+        _stream_rag(
+            request.question,
+            user_id,
+            request.max_iterations,
+            clarification_response=request.clarification_response,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -2,20 +2,40 @@
 
 Nodes
 -----
-0. classify_intent_node     – LLM classifies query intent and routes to the right tool
-1. extract_keywords_node    – extract key terms from the raw question
-2. rewrite_query_node       – optimise query for dense-vector retrieval
-3. retrieve_node            – hybrid semantic + keyword search in ChromaDB
-4. check_sufficiency_node   – LLM decides if retrieved context covers the question
-                              (loop gate: insufficient → refine_query, sufficient → generate)
-5. generate_node            – build answer from retrieved context
-6. refine_query_node        – LLM generates a targeted follow-up query and decides
-                              whether to run keyword, semantic, or hybrid retrieval
-7. web_search_node          – search the internet via DuckDuckGo
-8. weather_node             – fetch current weather for a location
-9. datetime_node            – return current date/time
-10. direct_answer_node      – LLM answers general/casual questions directly
-11. tool_answer_node        – LLM generates answer from tool results
+0.  classify_intent_node      – LLM classifies query intent and routes to the right tool
+0.5 check_clarification_node  – LLM decides if the question is too vague and asks
+                                 the user for clarification (human-in-the-loop)
+1.  extract_keywords_node     – extract key terms from the raw question
+2.  rewrite_query_node        – optimise query for dense-vector retrieval
+3.  retrieve_node             – hybrid semantic + keyword search in ChromaDB
+4.  check_sufficiency_node    – LLM decides if retrieved context covers the question
+                                 (three-way gate: sufficient → generate,
+                                  insufficient → refine_query,
+                                  ambiguous → ask user for clarification)
+5.  generate_node             – build answer from retrieved context
+6.  refine_query_node         – LLM generates a targeted follow-up query
+7.  web_search_node           – search the internet via DuckDuckGo
+8.  weather_node              – fetch current weather for a location
+9.  datetime_node             – return current date/time
+10. direct_answer_node        – LLM answers general/casual questions directly
+11. tool_answer_node          – LLM generates answer from tool results
+
+Human-in-the-Loop
+-----------------
+Clarification can be triggered at two points:
+  1. **check_clarification** — before retrieval, when the query is too vague
+  2. **check_sufficiency**   — after retrieval, when context reveals ambiguity
+
+When more info is needed, the pipeline sends a `clarification` SSE event
+(with a question + optional selectable options) and terminates.  The user
+responds and the frontend re-invokes the pipeline with
+``clarification_response`` set.  ``check_clarification_node`` enriches the
+question, and the full pipeline re-runs — including a fresh sufficiency
+check on the new, better-focused retrieval results.
+
+To prevent infinite loops, ``check_sufficiency`` will only ask for
+clarification once (it checks ``clarification_response`` to see if the user
+already clarified).
 """
 
 from __future__ import annotations
@@ -33,6 +53,7 @@ from app.database.bm25_store import BM25CorpusStore
 from app.database.chroma import ChromaVectorStore
 from app.llm import embeddings, llm_chat
 from app.rag.prompts import (
+    CLARIFICATION_SYSTEM,
     DIRECT_ANSWER_SYSTEM,
     GENERATE_SYSTEM,
     KEYWORDS_SYSTEM,
@@ -118,6 +139,99 @@ def _chromadb_rows(raw: dict) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+# ── Node 0.5: check_clarification (human-in-the-loop) ─────────────────────────
+
+
+def check_clarification_node(state: RAGState) -> dict[str, Any]:
+    """Decide whether the user's question needs clarification before proceeding.
+
+    If ``clarification_response`` is already present in state (user replied to
+    a previous clarification request), the original question is enriched with
+    the user's response and the pipeline continues without re-asking.
+
+    Otherwise the LLM evaluates the question's clarity.  When clarification is
+    needed the node sets ``needs_clarification=True`` and provides a question
+    + optional selection options.  The graph routes to END so the SSE stream
+    can deliver the clarification request to the client.
+    """
+    set_current_node("check_clarification")
+    question = state["question"]
+    clarification_response = state.get("clarification_response", "")
+
+    # ── User already responded to a clarification → enrich question & proceed ─
+    if clarification_response:
+        enriched = f"{question}\nUser clarification: {clarification_response}"
+        logger.info("Clarification received — enriched question: %s", enriched)
+        return {
+            "question": enriched,
+            "needs_clarification": False,
+            "clarification_question": "",
+            "clarification_options": [],
+            "clarification_source": "",
+            "step": {
+                "title": "Clarification Received",
+                "description": f"User clarified: \"{clarification_response}\" — proceeding.",
+            },
+        }
+
+    # ── Ask the LLM whether clarification is needed ───────────────────────────
+    prompt = f"User question: {question}"
+
+    raw = _stream_and_collect(
+        llm_chat.stream_text(
+            prompt=prompt,
+            system_instruction=CLARIFICATION_SYSTEM,
+            temperature=0.1,
+        )
+    )
+
+    needs = False
+    clar_question = ""
+    clar_options: list[dict[str, str]] = []
+    reason = ""
+
+    try:
+        match = re.search(r"\{.*?\}", raw, re.DOTALL)
+        parsed = json.loads(match.group(0)) if match else {}
+        needs = bool(parsed.get("needs_clarification", False))
+        clar_question = parsed.get("question", "").strip()
+        raw_options = parsed.get("options", [])
+        # Sanitise options — keep only well-formed entries
+        for opt in raw_options:
+            if isinstance(opt, dict) and "label" in opt and "value" in opt:
+                clar_options.append(
+                    {"label": str(opt["label"]), "value": str(opt["value"])}
+                )
+        reason = parsed.get("reason", "")
+    except Exception as exc:
+        logger.debug("Clarification JSON parse error: %s | raw=%r", exc, raw[:200])
+
+    if needs and clar_question:
+        logger.info("Clarification needed: %s (options=%d)", clar_question, len(clar_options))
+        return {
+            "needs_clarification": True,
+            "clarification_question": clar_question,
+            "clarification_options": clar_options,
+            "clarification_source": "start",
+            "step": {
+                "title": "Clarification Needed",
+                "description": reason or "The question is ambiguous — asking the user.",
+            },
+        }
+
+    logger.info("No clarification needed — proceeding to keyword extraction.")
+    return {
+        "needs_clarification": False,
+        "clarification_question": "",
+        "clarification_options": [],
+        "clarification_source": "",
+        "step": {
+            "title": "Question Clear",
+            "description": reason or "Question is well-formed — proceeding to retrieval.",
+        },
+    }
 
 
 # ── Node 1: extract_keywords ──────────────────────────────────────────────────
@@ -457,9 +571,20 @@ def merge_retrieve_node(state: RAGState) -> dict[str, Any]:
 def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
     """LLM gate: analyse retrieved chunks against the question.
 
-    Sets ``is_sufficient`` (bool) and ``sufficiency_reason`` (str) in state.
-    The graph uses ``is_sufficient`` to decide whether to loop back through
-    refine_query → retrieve or to proceed to generate.
+    Three possible outcomes:
+      1. **sufficient** → proceed to generate
+      2. **insufficient** → refine query and re-retrieve
+      3. **needs_clarification** → pause pipeline, ask the user
+
+    The clarification path is only available when no prior clarification has
+    been provided (``clarification_response`` is empty).  This prevents
+    infinite clarification loops — once the user has already clarified, the
+    sufficiency check sticks to sufficient/insufficient decisions.
+
+    After the user responds to a clarification, the pipeline re-runs from
+    scratch with the enriched question, producing better keywords, better
+    retrieval, and then this node re-evaluates sufficiency with the new
+    context.
     """
     set_current_node("check_sufficiency")
     question = state["question"]
@@ -467,6 +592,7 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
     chunks = state.get("retrieved_chunks", [])
     iteration = state.get("iteration", 0)
     max_iterations = state.get("max_iterations", 3)
+    already_clarified = bool(state.get("clarification_response", ""))
 
     # If we've hit the ceiling, just proceed regardless
     if iteration >= max_iterations - 1 or not chunks:
@@ -476,6 +602,7 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
         logger.info("Sufficiency check skipped (%s) — forcing proceed to generate.", reason)
         return {
             "is_sufficient": True,
+            "needs_clarification": False,
             "sufficiency_reason": reason,
             "step": {
                 "title": "Context Check Skipped",
@@ -503,17 +630,50 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
     )
 
     is_sufficient = False
+    needs_clarification = False
+    clar_question = ""
+    clar_options: list[dict[str, str]] = []
     reason = "could not parse sufficiency response"
     try:
         match = re.search(r"\{.*?\}", raw, re.DOTALL)
         parsed = json.loads(match.group(0)) if match else {}
         is_sufficient = bool(parsed.get("sufficient", False))
+        needs_clarification = bool(parsed.get("needs_clarification", False))
+        clar_question = parsed.get("clarification_question", "").strip()
+        raw_options = parsed.get("clarification_options", [])
+        for opt in raw_options:
+            if isinstance(opt, dict) and "label" in opt and "value" in opt:
+                clar_options.append(
+                    {"label": str(opt["label"]), "value": str(opt["value"])}
+                )
         reason = parsed.get("reason", reason)
         missing = parsed.get("missing_aspects", [])
         if missing:
             reason += f" Missing: {', '.join(missing)}"
     except Exception as exc:
         logger.debug("Sufficiency JSON parse error: %s | raw=%r", exc, raw[:200])
+
+    # ── Clarification path (only if user hasn't clarified yet) ────────────────
+    # After one clarification round, we never ask again — we either proceed to
+    # generate with what we have or refine the query automatically.
+    if needs_clarification and clar_question and not is_sufficient and not already_clarified:
+        logger.info(
+            "Sufficiency → clarification needed (iter=%d): %s",
+            iteration,
+            clar_question,
+        )
+        return {
+            "is_sufficient": False,
+            "needs_clarification": True,
+            "clarification_question": clar_question,
+            "clarification_options": clar_options,
+            "clarification_source": "sufficiency",
+            "sufficiency_reason": reason,
+            "step": {
+                "title": "Clarification Needed",
+                "description": reason or "Retrieved context is ambiguous — asking the user.",
+            },
+        }
 
     logger.info(
         "Sufficiency check iter=%d: sufficient=%s — %s",
@@ -531,6 +691,7 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
         su_desc = f"More information needed — will refine search. {reason}".strip()
     return {
         "is_sufficient": is_sufficient,
+        "needs_clarification": False,
         "sufficiency_reason": reason,
         "step": {"title": su_title, "description": su_desc},
     }

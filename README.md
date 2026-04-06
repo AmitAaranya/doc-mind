@@ -166,18 +166,65 @@ When the intent is `rag` (i.e. the question is about uploaded documents), the fo
 
 | Step | Node | Description |
 |------|------|-------------|
-| 1 | **extract_keywords** | LLM extracts key terms and decides retrieval depth (`top_k`, clamped 3–20) |
-| 2 | **rewrite_query** | LLM rewrites the question for optimal dense-vector retrieval |
-| 3 | **dispatch_retrieve** | Fans out to parallel retrieval branches |
-| 4a | **retrieve_semantic** | Cosine-similarity search against ChromaDB embeddings |
-| 4b | **retrieve_bm25** | BM25 keyword search against the in-memory corpus |
-| 5 | **merge_retrieve** | Deduplicates and merges results from both branches |
-| 6 | **check_sufficiency** | LLM judges whether retrieved context covers the question |
-| 7a | **refine_query** *(if insufficient)* | LLM generates a refined follow-up query and picks search mode (keyword / semantic / hybrid); loops back to `dispatch_retrieve` |
-| 7b | **generate** *(if sufficient)* | LLM produces the final answer grounded in retrieved chunks |
-| 8 | **evaluate** | RAGAS computes reference-free metrics: faithfulness, answer relevancy, context precision |
+| 1 | **check_clarification** | LLM evaluates if the question is clear enough; may ask user for clarification |
+| 2 | **extract_keywords** | LLM extracts key terms and decides retrieval depth (`top_k`, clamped 3–20) |
+| 3 | **rewrite_query** | LLM rewrites the question for optimal dense-vector retrieval |
+| 4 | **dispatch_retrieve** | Fans out to parallel retrieval branches |
+| 5a | **retrieve_semantic** | Cosine-similarity search against ChromaDB embeddings |
+| 5b | **retrieve_bm25** | BM25 keyword search against the in-memory corpus |
+| 6 | **merge_retrieve** | Deduplicates and merges results from both branches |
+| 7 | **check_sufficiency** | LLM judges whether retrieved context covers the question; may ask user for clarification if ambiguity is detected |
+| 8a | **refine_query** *(if insufficient)* | LLM generates a refined follow-up query and picks search mode (keyword / semantic / hybrid); loops back to `dispatch_retrieve` |
+| 8b | **generate** *(if sufficient)* | LLM produces the final answer grounded in retrieved chunks |
+| 9 | **evaluate** | RAGAS computes reference-free metrics: faithfulness, answer relevancy, context precision |
 
 The sufficiency loop runs up to `max_iterations` times (configurable per request), progressively refining the query until the LLM deems the context adequate.
+
+### Human-in-the-Loop Clarification
+
+The pipeline can pause and ask the user for clarification at **two decision points**:
+
+1. **Before retrieval** (`check_clarification`) — when the question is ambiguous or too vague to search effectively
+2. **After retrieval** (`check_sufficiency`) — when retrieved context reveals ambiguity (e.g., multiple matching topics)
+
+When clarification is needed, the SSE stream sends a `clarification` event:
+
+```json
+{
+  "type": "clarification",
+  "question": "Which report are you asking about?",
+  "options": [
+    {"label": "Q3 Revenue Report", "value": "Q3 revenue report"},
+    {"label": "Annual Performance Review", "value": "annual performance review"},
+    {"label": "Project Status Report", "value": "project status report"}
+  ],
+  "source": "start"
+}
+```
+
+The user can select a predefined option or type a free-text response. The UI then re-invokes the pipeline with the `clarification_response` field set:
+
+```bash
+curl -N -X POST http://localhost:8000/query \
+	-H 'Content-Type: application/json' \
+	-d '{
+	  "user_id": "demo-user",
+	  "question": "Tell me about the report",
+	  "max_iterations": 3,
+	  "clarification_response": "Q3 revenue report"
+	}'
+```
+
+#### Clarification Examples
+
+| User Question | Clarification Point | LLM Asks | Example Options |
+|---|---|---|---|
+| "Tell me about the report" | Start | "Which report are you referring to?" | Q3 Revenue Report, Annual Review, Project Status |
+| "What are the results?" | Start | "Results of what? Please specify the topic or document." | Experiment results, Financial results, Survey results |
+| "Compare the two" | Start | "Which two items would you like to compare?" | *(free text input)* |
+| "Summarize the document" | Start | "Which document should I summarize?" | document1.pdf, document2.pdf, report.docx |
+| "What is the performance?" | Sufficiency | "The documents mention both CPU performance metrics and employee performance reviews. Which one are you asking about?" | CPU/System Performance, Employee Performance |
+| "What did the team decide?" | Sufficiency | "Multiple meeting notes were found. Which meeting are you referring to?" | Sprint Planning (Jan 15), Retrospective (Jan 22), Design Review (Jan 25) |
 
 ### Key Technology Choices
 

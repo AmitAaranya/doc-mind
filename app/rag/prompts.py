@@ -4,6 +4,47 @@ Every prompt constant used by nodes.py lives here so they are easy to find,
 review, and tweak in one place.
 """
 
+# ── Human-in-the-loop clarification prompt ────────────────────────────────────
+
+CLARIFICATION_SYSTEM = """\
+You are an intelligent query-analysis assistant. Your job is to decide \
+whether a user's question is clear enough to search documents and produce \
+a good answer, or whether you need to ask a clarifying question first.
+
+Ask for clarification ONLY when the question is genuinely ambiguous or \
+too vague to retrieve useful results. Do NOT ask for clarification on \
+simple, direct, or well-formed questions.
+
+Examples that NEED clarification:
+  - "Tell me about the report" → which report? (user may have many)
+  - "What are the results?" → results of what?
+  - "Compare the two" → which two items?
+  - "Summarize the document" → which document? (if multiple exist)
+  - "What is the performance?" → performance of what system/metric?
+
+Examples that do NOT need clarification:
+  - "What is the capital of France?" → clear
+  - "What are the key findings in the Q3 revenue report?" → specific enough
+  - "How does the authentication system work?" → clear intent
+  - "What is my salary?" → clear, answer from documents
+  - "List all action items from the meeting notes" → clear
+
+When you decide clarification is needed, provide:
+1. A clear, concise clarifying question
+2. Optionally, 2-5 suggested choices if you can infer likely answers
+
+Respond with ONLY a valid JSON object — no markdown, no explanation:
+{
+  "needs_clarification": true | false,
+  "question": "<clarifying question to ask the user, empty if not needed>",
+  "options": [
+    {"label": "<display text>", "value": "<value to use>"},
+    ...
+  ],
+  "reason": "<one sentence explaining your decision>"
+}\
+"""
+
 # ── RAG pipeline prompts ─────────────────────────────────────────────────────
 
 KEYWORDS_SYSTEM = """\
@@ -51,10 +92,32 @@ Given a user question, a list of key terms, and a set of retrieved document \
 passages, decide whether the retrieved context contains enough information \
 to answer the question fully.
 
+You have THREE possible decisions:
+1. **sufficient** — context fully covers the question → proceed to generate
+2. **insufficient** — context is missing info that might be in the documents → refine search
+3. **needs_clarification** — the question is ambiguous or the retrieved context \
+reveals multiple possible interpretations, and you MUST ask the user before proceeding.
+
+Ask for clarification ONLY when:
+  - Retrieval returned results about multiple distinct topics matching the \
+query (e.g. "performance" could mean CPU performance or employee performance)
+  - The question references something ambiguous that the context makes visible \
+(e.g. "the project" but context shows 3 different projects)
+  - Key information depends on user preference or choice that can't be inferred
+
+Do NOT ask for clarification if the answer is simply not in the documents — \
+just mark as insufficient.
+
 Respond with a JSON object using EXACTLY this schema (no markdown, no \
 extra keys):
 {
   "sufficient": true | false,
+  "needs_clarification": true | false,
+  "clarification_question": "<question to ask the user, empty if not needed>",
+  "clarification_options": [
+    {"label": "<display text>", "value": "<value to use>"},
+    ...
+  ],
   "reason": "<one sentence explaining what is covered or what is still \
 missing>",
   "missing_aspects": ["<aspect1>", "<aspect2>"]   // empty list if \

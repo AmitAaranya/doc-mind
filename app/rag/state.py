@@ -61,6 +61,13 @@ class RAGState(TypedDict, total=False):
     # ── Loop control ──────────────────────────────────────────────────────────
     iteration: int  # 0-based, incremented by refine_query_node
 
+    # ── Human-in-the-loop clarification ─────────────────────────────────────
+    needs_clarification: bool  # True = pipeline pauses and asks the user
+    clarification_question: str  # question text to display to the user
+    clarification_options: list[dict[str, str]]  # optional [{label, value}] for selection UI
+    clarification_response: str  # user's reply (set on follow-up invocation)
+    clarification_source: str  # "start" | "sufficiency" — which node triggered the ask
+
     # ── Agent routing (set by classify_intent_node) ──────────────────────────
     tool_name: str  # "rag" | "web_search" | "weather" | "datetime" | "general"
     tool_input: str  # extracted parameter for the tool (e.g. location, search query)
