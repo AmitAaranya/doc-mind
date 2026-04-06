@@ -814,9 +814,9 @@ def generate_node(state: RAGState) -> dict[str, Any]:
             or chunk["metadata"].get("file_name")
             or "unknown"
         )
-        page = chunk["metadata"].get("page", "")
-        loc = f"{src}" + (f" (p.{page})" if page else "")
-        context_parts.append(f"[{i}] {loc}\n{chunk['document']}")
+        page = chunk["metadata"].get("page_number") or chunk["metadata"].get("page", "")
+        loc = f"{src}" + (f", Page {page}" if page else "")
+        context_parts.append(f"[{i}] Source: {loc}\n{chunk['document']}")
 
     context = "\n\n---\n\n".join(context_parts)
 
@@ -834,12 +834,10 @@ def generate_node(state: RAGState) -> dict[str, Any]:
         )
     ).strip()
 
-    # Strip any References / Sources section the LLM may have appended anyway
-    answer = re.split(r"\n+(?:References|Sources):\s*", answer, maxsplit=1, flags=re.IGNORECASE)[
+    # Strip any References section the LLM may append (we keep Sources)
+    answer = re.split(r"\n+(?:References):\s*", answer, maxsplit=1, flags=re.IGNORECASE)[
         0
     ].strip()
-    # Strip inline citation markers like [1], [2], [1, 2], [1][2]
-    answer = re.sub(r"\s*\[\d+(?:,\s*\d+)*\](?:\[\d+(?:,\s*\d+)*\])*", "", answer).strip()
 
     logger.info("Generated answer: %d chars from %d chunks", len(answer), len(chunks))
     return {

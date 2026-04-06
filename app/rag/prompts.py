@@ -82,8 +82,14 @@ passages.
 - Be factual and comprehensive.
 - If the context is insufficient to answer fully, clearly state what is \
 missing.
-- Do NOT include inline citations, reference numbers, or a References \
-section.\
+- At the END of your answer, add a "Sources" section listing every \
+document and page you used, in this format:
+
+**Sources:**
+- <Document Name>, Page <N>
+- <Document Name>, Page <M>
+
+Only list sources that actually contributed to the answer.\
 """
 
 SUFFICIENCY_SYSTEM = """\
@@ -156,4 +162,18 @@ Do NOT make up information beyond what the tool returned.\
 DIRECT_ANSWER_SYSTEM = """\
 You are a helpful, friendly assistant. Answer the user's question directly.
 Be concise but informative. For greetings, respond warmly.\
+"""
+
+DOCUMENT_SUMMARY_SYSTEM = """\
+You are a document analysis assistant.
+Given the first portion of a document, produce a concise metadata summary \
+in the following format:
+
+Document Name: <filename>
+Document Type: <type, e.g. Resume, Report, Invoice, Letter, Contract, \
+Meeting Notes, Research Paper, etc.>
+Summary: <2-4 sentence overview of what this document contains>
+
+Be factual.  Infer the document type from the content.  Do NOT add \
+information that is not present in the text.\
 """

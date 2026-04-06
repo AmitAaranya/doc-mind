@@ -8,6 +8,7 @@ import base64
 import tempfile
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -17,7 +18,8 @@ from app.core.logging import get_logger
 from app.database.bm25_store import BM25CorpusStore
 from app.database.chroma import ChromaVectorStore
 from app.llm import embeddings, llm_chat
-from app.utils.chunker import DocumentChunker
+from app.rag.prompts import DOCUMENT_SUMMARY_SYSTEM
+from app.utils.chunker import Chunk, ChunkType, DocumentChunker
 from app.utils.document_processor import SUPPORTED_EXTENSIONS, DocumentProcessor
 from app.utils.pdf_processor import ImageBlock, OrderedPDFDocument
 
@@ -156,6 +158,42 @@ async def _process_one(
 
     for chunk in chunks:
         chunk.metadata["user_id"] = user_id
+
+    # ── 3a. Generate a document-summary chunk ─────────────────────────────
+    # Gather the first ~2000 chars of text content for the LLM to summarise.
+    preview_text = "\n\n".join(
+        c.content for c in chunks if c.metadata.get("block_type") != "image"
+    )[:2000]
+    if preview_text.strip():
+        try:
+            summary_raw = await asyncio.to_thread(
+                lambda: "".join(
+                    llm_chat.stream_text(
+                        prompt=f"Filename: {filename}\n\nDocument content (first part):\n{preview_text}",
+                        system_instruction=DOCUMENT_SUMMARY_SYSTEM,
+                        temperature=0.2,
+                    )
+                ),
+            )
+            summary_content = summary_raw.strip()
+            if summary_content:
+                total_pages = len(doc.pages) if hasattr(doc, "pages") else 0
+                summary_chunk = Chunk(
+                    id=str(uuid4()),
+                    content=summary_content,
+                    chunk_type=ChunkType.SUMMARY,
+                    metadata={
+                        "source_file": filename,
+                        "page_number": 0,
+                        "block_type": "summary",
+                        "user_id": user_id,
+                        "total_pages": total_pages,
+                    },
+                )
+                chunks.insert(0, summary_chunk)
+                logger.info("Document summary chunk created for %s", filename)
+        except Exception as exc:
+            logger.warning("Summary chunk generation failed for %s: %s", filename, exc)
 
     if not chunks:
         return (

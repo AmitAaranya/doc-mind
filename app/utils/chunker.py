@@ -67,6 +67,7 @@ class ChunkType(StrEnum):
     TEXT = "text"
     TABLE = "table"
     IMAGE = "image"
+    SUMMARY = "summary"
 
 
 @dataclass
