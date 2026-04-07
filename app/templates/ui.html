@@ -732,6 +732,87 @@
     }
     .history-resume-btn:hover { opacity: 0.85; }
 
+    /* ── History detail timeline (inside each history-item) ── */
+    .history-detail {
+      display: none;
+      margin-top: 10px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+    .history-item.expanded .history-detail { display: block; }
+    .history-toggle {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--ink-3);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .history-toggle:hover { border-color: var(--accent); color: var(--accent); }
+    .history-toggle svg {
+      width: 14px;
+      height: 14px;
+      transition: transform 200ms;
+    }
+    .history-item.expanded .history-toggle svg { transform: rotate(180deg); }
+    /* Compact mini-timeline reusing .timeline/.step styles */
+    .history-timeline {
+      position: relative;
+      padding-left: 28px;
+      margin-top: 8px;
+    }
+    .history-timeline::before {
+      content: '';
+      position: absolute;
+      left: 9px; top: 10px; bottom: 10px;
+      width: 2px;
+      background: var(--border);
+      border-radius: 1px;
+    }
+    .history-step {
+      position: relative;
+      padding-bottom: 6px;
+    }
+    .history-step:last-child { padding-bottom: 0; }
+    .history-step-dot {
+      position: absolute;
+      left: -28px;
+      top: 3px;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--success-light);
+      border: 2px solid var(--success);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .history-step-dot svg { width: 10px; height: 10px; color: var(--success); }
+    .history-step-title {
+      font-weight: 600;
+      font-size: 0.83rem;
+      color: var(--ink);
+    }
+    .history-step-desc {
+      font-size: 0.78rem;
+      color: var(--ink-3);
+      line-height: 1.4;
+      margin-top: 1px;
+    }
+    /* Compact full answer inside detail */
+    .history-full-answer {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: var(--surface-alt);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     .data-item {
       border: 1px solid var(--border);
       border-radius: var(--r);
@@ -1177,8 +1258,7 @@
        State
        ═══════════════════════════════════════════════════════════ */
     let steps = [];           // {id, node, title, desc, tokens, displayed, status, el}
-    let rawAnswerTokens = ""; // full buffered answer text
-    let displayedAnswer = ""; // what's currently rendered
+    let rawAnswerTokens = ""; // accumulated answer text (for showResult fallback)
     let isStreaming = false;
     let stepIdCounter = 0;
 
@@ -1188,11 +1268,11 @@
     let currentThreadId = null;      // thread_id of the most recent run
 
     /* ═══════════════════════════════════════════════════════════
-       Typewriter Engine
+       Typewriter Engine  (step thinking panels only)
        ═══════════════════════════════════════════════════════════
-       Google's API yields text in large chunks (50-200 chars).
-       This engine buffers them and renders character-by-character
-       at ~12ms/char for a smooth Copilot-like streaming feel.
+       Drives character-by-character reveal inside each pipeline
+       step's .step-thinking <pre>.  Answer tokens are written
+       directly to the DOM as they arrive (no buffering).
     */
     const CHAR_DELAY = 12; // ms between characters
     let _twTimer = null;
@@ -1209,7 +1289,7 @@
     function _tickTypewriter() {
       let anyWork = false;
 
-      // 1) Drain step thinking buffers char-by-char
+      // Drain step thinking buffers char-by-char
       for (const step of steps) {
         if (step.status !== "active") continue;
         if (step.displayed.length < step.tokens.length) {
@@ -1225,21 +1305,10 @@
         }
       }
 
-      // 2) Drain answer buffer char-by-char
-      if (displayedAnswer.length < rawAnswerTokens.length) {
-        displayedAnswer = rawAnswerTokens.slice(0, displayedAnswer.length + 1);
-        const span = answerContent.querySelector(".answer-streaming");
-        if (span) {
-          span.textContent = displayedAnswer;
-          answerContent.scrollTop = answerContent.scrollHeight;
-        }
-        anyWork = true;
-      }
-
       if (!anyWork && !isStreaming) stopTypewriter();
     }
 
-    /** Flush all remaining buffered text instantly (used on result/done). */
+    /** Flush all remaining buffered step-thinking text instantly. */
     function flushTypewriter() {
       stopTypewriter();
       for (const step of steps) {
@@ -1249,7 +1318,6 @@
           if (pre) pre.textContent = step.displayed;
         }
       }
-      displayedAnswer = rawAnswerTokens;
     }
 
     /* ═══════════════════════════════════════════════════════════
@@ -1459,14 +1527,18 @@
       step.el.classList.remove("expanded");
     }
 
-    /** Buffer answer token (typewriter renders it). */
+    /** Append a generate/tool_answer/direct_answer token directly to the answer panel. */
     function appendToAnswer(content) {
+      rawAnswerTokens += content; // keep accumulating for showResult fallback
       if (answerSection.hidden) {
         answerSection.hidden = false;
         answerContent.innerHTML = '<span class="answer-streaming typing-cursor"></span>';
       }
-      rawAnswerTokens += content;
-      startTypewriter();
+      const span = answerContent.querySelector(".answer-streaming");
+      if (span) {
+        span.textContent += content;
+        answerContent.scrollTop = answerContent.scrollHeight;
+      }
     }
 
     /** Show the final result. */
@@ -1708,7 +1780,6 @@
       stopTypewriter();
       steps = [];
       rawAnswerTokens = "";
-      displayedAnswer = "";
       stepIdCounter = 0;
       pendingClarification = null;
       selectedOption = null;
@@ -1956,7 +2027,7 @@
           : "";
 
         return `
-          <div class="history-item">
+          <div class="history-item" data-thread="${esc(t.thread_id)}">
             <div class="history-top">
               <div class="history-badges">
                 <span class="badge ${statusCls}">${statusLabel}</span>
@@ -1970,10 +2041,45 @@
             ${answerPreview}
             <div class="history-footer">
               ${refsPart}
-              ${resumeBtn}
+              <div style="display:flex;gap:6px;align-items:center">
+                <button class="history-toggle" data-thread="${esc(t.thread_id)}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  Steps
+                </button>
+                ${resumeBtn}
+              </div>
+            </div>
+            <div class="history-detail">
+              <div class="history-detail-inner">Loading…</div>
             </div>
           </div>`;
       }).join("");
+
+      // Wire up Steps toggle buttons
+      historyList.querySelectorAll(".history-toggle").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const item = btn.closest(".history-item");
+          const isExpanded = item.classList.contains("expanded");
+          if (isExpanded) {
+            item.classList.remove("expanded");
+            return;
+          }
+          item.classList.add("expanded");
+          const detail = item.querySelector(".history-detail-inner");
+          const threadId = btn.dataset.thread;
+          if (detail.dataset.loaded) return; // already fetched
+          detail.textContent = "Loading steps…";
+          try {
+            const resp = await fetch(`/ui/history/${encodeURIComponent(threadId)}`);
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || "Failed");
+            detail.dataset.loaded = "1";
+            detail.innerHTML = renderHistoryDetail(data);
+          } catch (err) {
+            detail.textContent = "Failed to load steps: " + err;
+          }
+        });
+      });
 
       // Wire up Resume buttons
       historyList.querySelectorAll(".history-resume-btn").forEach(btn => {
@@ -1998,6 +2104,28 @@
           }
         });
       });
+    }
+
+    function renderHistoryDetail(data) {
+      const checkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      const steps = data.steps || [];
+      const stepsHtml = steps.length
+        ? `<div class="history-timeline">${
+            steps.map(s => `
+              <div class="history-step">
+                <div class="history-step-dot">${checkSvg}</div>
+                <div class="history-step-title">${esc(s.title)}</div>
+                ${s.description ? `<div class="history-step-desc">${esc(s.description)}</div>` : ""}
+              </div>`).join("")
+          }</div>`
+        : '<div class="history-empty">No step data recorded for this run.</div>';
+
+      const answerHtml = data.answer
+        ? `<div style="margin-top:8px;font-size:0.82rem;font-weight:600;color:var(--ink-3)">Full Answer</div>
+           <div class="history-full-answer">${esc(data.answer)}</div>`
+        : "";
+
+      return stepsHtml + answerHtml;
     }
 
     /* ═══════════════════════════════════════════════════════════
