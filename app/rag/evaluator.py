@@ -13,6 +13,7 @@ Metrics
   • faithfulness               – answer claims grounded in retrieved context
   • answer_relevancy            – answer addresses the question
   • context_precision           – retrieved passages are relevant to the question
+                                   (evaluated against the LLM-rephrased optimised query)
 """
 
 from __future__ import annotations
@@ -135,6 +136,10 @@ def evaluate_node(state: RAGState) -> dict[str, Any]:
     graph, always followed by END.
     """
     question = state["question"]
+    # Use the LLM-rephrased query (built after all clarifications) for RAGAS so
+    # the judge evaluates context precision against the actual search intent,
+    # not the raw user utterance (which may be vague or contain clarification tags).
+    eval_question = state.get("optimized_query") or question
     answer = state.get("answer", "")
     chunks = state.get("retrieved_chunks", [])
     iteration = state.get("iteration", 0)
@@ -147,23 +152,25 @@ def evaluate_node(state: RAGState) -> dict[str, Any]:
     scores: dict[str, float] = {}
     if answer and contexts:
         try:
-            scores = _run_ragas(question, answer, contexts)
+            scores = _run_ragas(eval_question, answer, contexts)
         except Exception as exc:
             logger.warning("RAGAS evaluation error: %s", exc)
 
     avg = sum(scores.values()) / len(scores) if scores else 0.0
 
     logger.info(
-        "RAGAS evaluation — iterations=%d  avg_score=%.3f  scores=%s",
+        "RAGAS evaluation — iterations=%d  avg_score=%.3f  scores=%s  eval_question=%r",
         iteration,
         avg,
         scores,
+        eval_question,
     )
 
     # ── Persist to local JSONL ────────────────────────────────────────────────
     record = {
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
         "question": question,
+        "eval_question": eval_question,
         "answer_length": len(answer),
         "iterations": iteration,
         "search_queries_tried": queries_tried,
