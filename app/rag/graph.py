@@ -2,40 +2,40 @@
 
 Flow
 ----
-START ──► classify_intent ──┬──► "rag"        → check_clarification ──┬──► needs_clarification? YES → END (sends clarification to user)
-                            │                                          └──► needs_clarification? NO  → [full RAG pipeline]
+START ──► classify_intent ──┬──► "rag"        → check_clarification ──► [interrupt if vague] ──► extract_keywords → ...
                             ├──► "web_search"  → web_search → tool_answer → END
                             ├──► "weather"     → weather → tool_answer → END
                             ├──► "datetime"    → datetime → tool_answer → END
                             └──► "general"     → direct_answer → END
 
-Clarification can happen at **two** points:
-  1. **At start** (check_clarification) — the question is too vague to even begin retrieval
-  2. **At sufficiency** (check_sufficiency) — retrieved context reveals ambiguity
+Clarification uses LangGraph ``interrupt()`` + ``MemorySaver`` checkpointer.
+When clarification is needed the node calls ``interrupt({...})``, which:
+  1. Suspends execution and checkpoints full state (thread_id keyed)
+  2. Returns the interrupt payload to the caller via the ``__interrupt__`` stream event
+  3. Resumes execution (from the SAME point inside the node) when the caller
+     calls ``graph.stream(Command(resume=answer), config={"configurable": {"thread_id": ...}})``
 
-When the user responds, the frontend re-invokes the pipeline with
-``clarification_response`` set.  The pipeline merges the response into the
-question and reruns from the appropriate point.
+Clarification can happen at **two** points:
+  1. **check_clarification** — before retrieval, when the query is too vague
+  2. **check_sufficiency**   — after retrieval, when context reveals ambiguity
+     (only once — guarded by ``clarification_response`` in state)
 
 RAG sub-pipeline
 ----------------
   extract_keywords → rewrite_query → dispatch_retrieve → retrieve_semantic ──┐
                                             ▲                                 ├─► merge_retrieve → check_sufficiency
                                             │              retrieve_bm25 ────┘         │
-                                       refine_query ◄─────────────────────────── sufficient? NO (& no clarification)
-                                                                                       │
-                                                                              needs_clarification? YES → END
-                                                                                       │
-                                                                                  sufficient? YES
-                                                                                       │
-                                                                                       ▼
-                                                                                  generate → evaluate → END
+                                       refine_query ◄──────────────── insufficient? NO generate
+                                                                                        │
+                                                                                        ▼
+                                                                                   generate → evaluate → END
 """
 
 from __future__ import annotations
 
 import io
 
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from PIL import Image
 
@@ -74,20 +74,12 @@ def _route_by_tool(state: RAGState) -> str:
     return tool
 
 
-def _decide_after_clarification(state: RAGState) -> str:
-    """After check_clarification: pause for user input or continue the RAG pipeline."""
-    if state.get("needs_clarification", False):
-        logger.info("Clarification needed — pausing pipeline for user input.")
-        return "needs_clarification"
-    logger.info("No clarification needed — proceeding to extract_keywords.")
-    return "proceed"
-
-
 def _decide_after_sufficiency(state: RAGState) -> str:
-    """After check_sufficiency: loop back, ask user, or proceed to generate."""
-    if state.get("needs_clarification", False):
-        logger.info("Sufficiency check → clarification needed — pausing for user input.")
-        return "clarify"
+    """After check_sufficiency: loop back or proceed to generate.
+
+    Clarification is now handled inside the node via ``interrupt()``;
+    this edge only needs to distinguish sufficient vs. refine.
+    """
     if state.get("is_sufficient", False):
         logger.info("Context sufficient – proceeding to generate.")
         return "generate"
@@ -147,15 +139,10 @@ def build_rag_graph():
     workflow.add_edge("tool_answer", END)
     workflow.add_edge("direct_answer", END)
 
-    # ── Clarification gate: ask user or proceed to RAG ────────────────────────
-    workflow.add_conditional_edges(
-        "check_clarification",
-        _decide_after_clarification,
-        {
-            "needs_clarification": END,  # pipeline pauses; UI shows clarification
-            "proceed": "extract_keywords",  # question is clear; continue RAG
-        },
-    )
+    # ── Clarification gate: interrupt() inside node handles the pause/resume ──
+    # Simple edge — the node either returns immediately (clear question) or
+    # calls interrupt() to pause; either way the next step is extract_keywords.
+    workflow.add_edge("check_clarification", "extract_keywords")
 
     # ── RAG pipeline edges ────────────────────────────────────────────────────
     workflow.add_edge("extract_keywords", "rewrite_query")
@@ -166,14 +153,14 @@ def build_rag_graph():
     workflow.add_edge("retrieve_bm25", "merge_retrieve")
     workflow.add_edge("merge_retrieve", "check_sufficiency")
 
-    # Conditional edge: check_sufficiency gates the loop (3-way)
+    # Conditional edge: check_sufficiency gates the loop (2-way)
+    # Clarification is handled inside the node via interrupt(); no END branch needed.
     workflow.add_conditional_edges(
         "check_sufficiency",
         _decide_after_sufficiency,
         {
-            "refine": "refine_query",       # missing context → loop
-            "generate": "generate",          # context is enough → answer
-            "clarify": END,                  # ambiguity detected → ask user
+            "refine": "refine_query",  # missing context → loop
+            "generate": "generate",  # context is enough → answer
         },
     )
 
@@ -184,7 +171,7 @@ def build_rag_graph():
     workflow.add_edge("generate", "evaluate")
     workflow.add_edge("evaluate", END)
 
-    return workflow.compile()
+    return workflow.compile(checkpointer=MemorySaver())
 
 
 # Singleton graph compiled once at import time

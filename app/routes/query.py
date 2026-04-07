@@ -15,7 +15,8 @@ SSE event shapes
 ----------------
   stage         : {"type":"stage",  "node":"<id>", "title":"<str>", "description":"<str>"}
   token         : {"type":"token",  "content":"<str>"}   ← every LLM token, every node, real-time
-  clarification : {"type":"clarification", "question":"<str>", "options":[{"label":"..","value":".."}]}
+  clarification : {"type":"clarification", "thread_id":"<uuid>", "question":"<str>",
+                    "options":[{"label":"..","value":".."}], "source":"start|sufficiency"}
   result        : {"type":"result", "answer":"...", "references":[...], "ragas_scores":{...},
                     "optimized_query":"...", "keywords":[...], "iterations":N,
                     "search_queries_tried":[...]}
@@ -28,11 +29,13 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from langgraph.types import Command
 from pydantic import BaseModel, Field
 
 from app.core.logging import get_logger
@@ -51,16 +54,17 @@ class QueryRequest(BaseModel):
     user_id: str = Field(
         ..., min_length=1, description="Raw user identifier used for tenant filtering"
     )
-    question: str = Field(
-        ..., min_length=1, description="Question or message to process"
-    )
+    question: str = Field(..., min_length=1, description="Question or message to process")
     max_iterations: int = Field(
         default=3, ge=1, le=5, description="Max retrieval-refinement loop iterations (1-5)"
     )
+    thread_id: str | None = Field(
+        default=None,
+        description="Existing LangGraph thread to resume (needed with clarification_response).",
+    )
     clarification_response: str | None = Field(
         default=None,
-        description="User's response to a previous clarification request. "
-        "When set, the pipeline skips the clarification check and enriches the question.",
+        description="User's answer to a clarification request (requires thread_id).",
     )
 
 
@@ -81,8 +85,15 @@ def _sse(event: dict[str, Any]) -> str:
 
 
 async def _stream_rag(
-    question: str, user_id: str, max_iterations: int, clarification_response: str | None = None,
+    question: str,
+    user_id: str,
+    max_iterations: int,
+    thread_id: str | None = None,
+    clarification_response: str | None = None,
 ) -> AsyncGenerator[str, None]:
+    # Assign or carry forward a thread_id so the caller can resume later.
+    resolved_thread_id = thread_id or str(uuid.uuid4())
+    config: dict[str, Any] = {"configurable": {"thread_id": resolved_thread_id}}
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue[Any] = asyncio.Queue()
     _SENTINEL = object()
@@ -104,21 +115,41 @@ async def _stream_rag(
 
         set_token_callback(_on_token)
         accumulated: dict[str, Any] = {}
+        interrupted = False
 
-        graph_input: dict[str, Any] = {
-            "question": question,
-            "user_id": user_id,
-            "max_iterations": max_iterations,
-        }
-        if clarification_response:
-            graph_input["clarification_response"] = clarification_response
+        # Decide whether this is a fresh start or a resume.
+        if clarification_response and thread_id:
+            graph_input: Any = Command(resume=clarification_response)
+        else:
+            graph_input = {
+                "question": question,
+                "user_id": user_id,
+                "max_iterations": max_iterations,
+            }
 
         try:
             for chunk in rag_graph.stream(
                 graph_input,
+                config=config,  # type: ignore[arg-type]
                 stream_mode="updates",
             ):
                 for node_name, node_output in chunk.items():
+                    # ── Interrupt event: graph paused for user input ──────────────────
+                    if node_name == "__interrupt__":
+                        interrupted = True
+                        for intr in node_output:  # tuple of Interrupt objects
+                            payload = intr.value
+                            _put(
+                                {
+                                    "type": "clarification",
+                                    "thread_id": resolved_thread_id,
+                                    "question": payload.get("question", ""),
+                                    "options": payload.get("options", []),
+                                    "source": payload.get("source", "start"),
+                                }
+                            )
+                        continue
+
                     if node_name.startswith("__"):
                         continue
 
@@ -139,24 +170,12 @@ async def _stream_rag(
                         }
                     )
 
-                    # Emit a clarification event when the pipeline pauses for user input
-                    if node_output.get("needs_clarification"):
-                        _put(
-                            {
-                                "type": "clarification",
-                                "question": node_output.get("clarification_question", ""),
-                                "options": node_output.get("clarification_options", []),
-                                "source": node_output.get("clarification_source", "start"),
-                            }
-                        )
-
-            # If the pipeline ended with a clarification request, don't send a result event
-            if accumulated.get("needs_clarification"):
-                pass  # client will handle the clarification event
-            else:
+            # Only emit a result when the pipeline ran to completion (no interrupt).
+            if not interrupted:
                 _put(
                     {
                         "type": "result",
+                        "thread_id": resolved_thread_id,
                         "answer": accumulated.get("answer", ""),
                         "references": accumulated.get("references", []),
                         "ragas_scores": accumulated.get("ragas_scores", {}),
@@ -204,7 +223,7 @@ async def query_documents(request: QueryRequest) -> StreamingResponse:
     |-----------------|----------------------------------------------------|---------------------------------  |
     | `stage`         | `node`, `title`, `description`                     | After each pipeline node          |
     | `token`         | `content`                                          | Each LLM token while writing      |
-    | `clarification` | `question`, `options`, `source`                    | Pipeline needs user input         |
+    | `clarification` | `thread_id`, `question`, `options`, `source`       | Pipeline needs user input         |
     | `result`        | `answer`, `references`, `ragas_scores`, `keywords` | Pipeline complete                 |
     | `done`          | —                                                  | Stream closed                     |
     | `error`         | `detail`                                           | On failure                        |
@@ -226,10 +245,11 @@ async def query_documents(request: QueryRequest) -> StreamingResponse:
         raise HTTPException(status_code=422, detail="user_id must not be blank.")
 
     logger.info(
-        "SSE query: user_id=%r question=%r (max_iter=%d, clarification=%r)",
+        "SSE query: user_id=%r question=%r (max_iter=%d, thread_id=%r, clarification=%r)",
         user_id,
         request.question,
         request.max_iterations,
+        request.thread_id,
         request.clarification_response,
     )
     return StreamingResponse(
@@ -237,6 +257,7 @@ async def query_documents(request: QueryRequest) -> StreamingResponse:
             request.question,
             user_id,
             request.max_iterations,
+            thread_id=request.thread_id,
             clarification_response=request.clarification_response,
         ),
         media_type="text/event-stream",

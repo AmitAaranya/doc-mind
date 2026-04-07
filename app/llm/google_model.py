@@ -115,9 +115,12 @@ class GoogleLLMModel(BaseLLM):
                 if code in _RETRYABLE_CODES and attempt < _MAX_RETRIES - 1:
                     wait = _RETRY_BACKOFF[attempt]
                     logger.warning(
-                        "Retryable error (code=%s, attempt %d/%d), "
-                        "retrying in %ds: %s",
-                        code, attempt + 1, _MAX_RETRIES, wait, exc,
+                        "Retryable error (code=%s, attempt %d/%d), retrying in %ds: %s",
+                        code,
+                        attempt + 1,
+                        _MAX_RETRIES,
+                        wait,
+                        exc,
                     )
                     sleep(wait)
                 else:
@@ -265,9 +268,12 @@ class GoogleLLMModel(BaseLLM):
                 if code in _RETRYABLE_CODES and attempt < _MAX_RETRIES - 1:
                     wait = _RETRY_BACKOFF[attempt]
                     logger.warning(
-                        "Retryable tool-call error (code=%s, attempt %d/%d), "
-                        "retrying in %ds: %s",
-                        code, attempt + 1, _MAX_RETRIES, wait, exc,
+                        "Retryable tool-call error (code=%s, attempt %d/%d), retrying in %ds: %s",
+                        code,
+                        attempt + 1,
+                        _MAX_RETRIES,
+                        wait,
+                        exc,
                     )
                     sleep(wait)
                 else:

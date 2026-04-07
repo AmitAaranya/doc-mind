@@ -47,6 +47,7 @@ from collections.abc import Callable
 from typing import Any
 
 from langchain_community.retrievers import BM25Retriever
+from langgraph.types import interrupt
 
 from app.core.logging import get_logger
 from app.database.bm25_store import BM25CorpusStore
@@ -172,7 +173,7 @@ def check_clarification_node(state: RAGState) -> dict[str, Any]:
             "clarification_source": "",
             "step": {
                 "title": "Clarification Received",
-                "description": f"User clarified: \"{clarification_response}\" — proceeding.",
+                "description": f'User clarified: "{clarification_response}" — proceeding.',
             },
         }
 
@@ -201,23 +202,35 @@ def check_clarification_node(state: RAGState) -> dict[str, Any]:
         # Sanitise options — keep only well-formed entries
         for opt in raw_options:
             if isinstance(opt, dict) and "label" in opt and "value" in opt:
-                clar_options.append(
-                    {"label": str(opt["label"]), "value": str(opt["value"])}
-                )
+                clar_options.append({"label": str(opt["label"]), "value": str(opt["value"])})
         reason = parsed.get("reason", "")
     except Exception as exc:
         logger.debug("Clarification JSON parse error: %s | raw=%r", exc, raw[:200])
 
     if needs and clar_question:
         logger.info("Clarification needed: %s (options=%d)", clar_question, len(clar_options))
+        # ── Pause and wait for the user's answer ────────────────────────────────
+        # interrupt() checkpoints the graph state and raises GraphInterrupt.
+        # Execution resumes here (same line) once Command(resume=...) is called.
+        clar_answer: str = interrupt(
+            {
+                "question": clar_question,
+                "options": clar_options,
+                "source": "start",
+            }
+        )
+        enriched = f"{question}\nUser clarification: {clar_answer}"
+        logger.info("Clarification received — enriched question: %s", enriched)
         return {
-            "needs_clarification": True,
-            "clarification_question": clar_question,
-            "clarification_options": clar_options,
-            "clarification_source": "start",
+            "question": enriched,
+            "needs_clarification": False,
+            "clarification_question": "",
+            "clarification_options": [],
+            "clarification_source": "",
+            "clarification_response": clar_answer,  # guards check_sufficiency against re-asking
             "step": {
-                "title": "Clarification Needed",
-                "description": reason or "The question is ambiguous — asking the user.",
+                "title": "Clarification Received",
+                "description": f'User clarified: "{clar_answer}" — proceeding.',
             },
         }
 
@@ -643,9 +656,7 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
         raw_options = parsed.get("clarification_options", [])
         for opt in raw_options:
             if isinstance(opt, dict) and "label" in opt and "value" in opt:
-                clar_options.append(
-                    {"label": str(opt["label"]), "value": str(opt["value"])}
-                )
+                clar_options.append({"label": str(opt["label"]), "value": str(opt["value"])})
         reason = parsed.get("reason", reason)
         missing = parsed.get("missing_aspects", [])
         if missing:
@@ -662,16 +673,25 @@ def check_sufficiency_node(state: RAGState) -> dict[str, Any]:
             iteration,
             clar_question,
         )
+        # ── Pause and wait for the user's answer ────────────────────────────────
+        clar_answer: str = interrupt(
+            {
+                "question": clar_question,
+                "options": clar_options,
+                "source": "sufficiency",
+            }
+        )
+        enriched = f"{question}\nUser clarification: {clar_answer}"
+        logger.info("Sufficiency clarification received: %s", enriched)
         return {
-            "is_sufficient": False,
-            "needs_clarification": True,
-            "clarification_question": clar_question,
-            "clarification_options": clar_options,
-            "clarification_source": "sufficiency",
-            "sufficiency_reason": reason,
+            "question": enriched,
+            "is_sufficient": True,  # proceed to generate with the enriched question
+            "needs_clarification": False,
+            "clarification_response": clar_answer,
+            "sufficiency_reason": "Question enriched with user clarification — proceeding.",
             "step": {
-                "title": "Clarification Needed",
-                "description": reason or "Retrieved context is ambiguous — asking the user.",
+                "title": "Clarification Received",
+                "description": f'User clarified: "{clar_answer}" — proceeding to answer.',
             },
         }
 
@@ -835,9 +855,7 @@ def generate_node(state: RAGState) -> dict[str, Any]:
     ).strip()
 
     # Strip any References section the LLM may append (we keep Sources)
-    answer = re.split(r"\n+(?:References):\s*", answer, maxsplit=1, flags=re.IGNORECASE)[
-        0
-    ].strip()
+    answer = re.split(r"\n+(?:References):\s*", answer, maxsplit=1, flags=re.IGNORECASE)[0].strip()
 
     logger.info("Generated answer: %d chars from %d chunks", len(answer), len(chunks))
     return {
@@ -958,15 +976,13 @@ def classify_intent_node(state: RAGState) -> dict[str, Any]:
         fn_name = result.get("name", "direct_answer")
         args = result.get("args", {})
         tool_name = FUNCTION_TO_TOOL.get(fn_name, "general")
-        tool_input = (
-            args.get("query", "")
-            or args.get("location", "")
-            or args.get("topic", "")
-        )
+        tool_input = args.get("query", "") or args.get("location", "") or args.get("topic", "")
     except Exception as exc:
         logger.warning("Native tool call failed, defaulting to general: %s", exc)
 
-    logger.info("Intent classified (native): fn=%s → tool=%s input=%r", fn_name, tool_name, tool_input)
+    logger.info(
+        "Intent classified (native): fn=%s → tool=%s input=%r", fn_name, tool_name, tool_input
+    )
     return {
         "tool_name": tool_name,
         "tool_input": tool_input,

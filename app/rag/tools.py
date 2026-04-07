@@ -34,11 +34,13 @@ def web_search(query: str, max_results: int = 5) -> str:
                 try:
                     news = list(ddgs.news(query, max_results=max_results))
                     for n in news:
-                        results.append({
-                            "title": n.get("title", ""),
-                            "body": n.get("body", ""),
-                            "href": n.get("url", ""),
-                        })
+                        results.append(
+                            {
+                                "title": n.get("title", ""),
+                                "body": n.get("body", ""),
+                                "href": n.get("url", ""),
+                            }
+                        )
                 except Exception:
                     logger.debug("News fallback also failed for: %r", query)
 
@@ -129,6 +131,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
 
 
 # ── Gemini function declarations for native tool calling ─────────────────────
+
 
 def get_gemini_tool_declarations():
     """Build google.genai Tool objects for Gemini function calling.

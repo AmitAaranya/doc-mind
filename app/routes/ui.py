@@ -63,3 +63,49 @@ async def ui_data() -> dict[str, Any]:
         "documents": docs_out,
         "chunks": chunks_out,
     }
+
+
+@ui_route.get("/ui/history", summary="List all previous pipeline run threads (MemorySaver)")
+async def ui_history() -> dict[str, Any]:
+    """Return every thread stored in the in-memory checkpointer, newest first.
+
+    Each entry contains the final state snapshot values so the UI can display
+    the question, answer, tool used, status, and timestamp without needing to
+    replay the graph.
+    """
+    from app.rag import rag_graph  # local import to avoid circular deps at module load
+
+    checkpointer = rag_graph.checkpointer
+    threads: list[dict[str, Any]] = []
+
+    for thread_id in list(checkpointer.storage.keys()):
+        try:
+            config = {"configurable": {"thread_id": thread_id}}
+            snapshot = rag_graph.get_state(config)
+            if snapshot is None:
+                continue
+            values = snapshot.values
+            is_interrupted = bool(snapshot.next)
+            threads.append(
+                {
+                    "thread_id": thread_id,
+                    "question": str(values.get("question", "")),
+                    "answer": str(values.get("answer", "")),
+                    "tool_name": str(values.get("tool_name", "rag")),
+                    "keywords": values.get("keywords", []),
+                    "references": values.get("references", []),
+                    "iteration": int(values.get("iteration", 0)),
+                    "status": "interrupted" if is_interrupted else "completed",
+                    "next_nodes": list(snapshot.next),
+                    "clarification_question": (
+                        str(values.get("clarification_question", "")) if is_interrupted else ""
+                    ),
+                    "created_at": str(snapshot.created_at or ""),
+                }
+            )
+        except Exception:
+            continue
+
+    # Newest first (ISO timestamps sort lexicographically)
+    threads.sort(key=lambda t: t["created_at"], reverse=True)
+    return {"threads": threads}

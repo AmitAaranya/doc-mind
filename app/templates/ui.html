@@ -666,6 +666,72 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
+    /* ── Run History ── */
+    .history-empty { color: var(--ink-3); font-size: 0.88rem; padding: 12px 0; }
+    .history-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      cursor: default;
+    }
+    .history-item:hover { border-color: var(--accent); }
+    .history-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .history-badges { display: flex; gap: 6px; flex-shrink: 0; margin-top: 2px; }
+    .badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      padding: 2px 7px;
+      border-radius: 999px;
+      text-transform: uppercase;
+    }
+    .badge-completed  { background: #d1fae5; color: #065f46; }
+    .badge-interrupted { background: #fef3c7; color: #92400e; }
+    .badge-tool { background: var(--surface-raised); color: var(--ink-2); }
+    .history-question {
+      font-weight: 600;
+      font-size: 0.9rem;
+      flex: 1;
+      word-break: break-word;
+    }
+    .history-meta {
+      font-size: 0.78rem;
+      color: var(--ink-3);
+      margin-top: 4px;
+    }
+    .history-answer {
+      margin-top: 8px;
+      font-size: 0.83rem;
+      color: var(--ink-2);
+      line-height: 1.5;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+    .history-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+    .history-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+    .history-resume-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .history-resume-btn:hover { opacity: 0.85; }
+
     .data-item {
       border: 1px solid var(--border);
       border-radius: var(--r);
@@ -1032,12 +1098,16 @@
       <div class="tabs">
         <button class="tab-btn active" data-tab="docs">Documents</button>
         <button class="tab-btn" data-tab="chunks">Chunks</button>
+        <button class="tab-btn" data-tab="history">Run History</button>
       </div>
       <div id="docsTab" class="tab-content active">
         <div id="documentsList"></div>
       </div>
       <div id="chunksTab" class="tab-content">
         <div id="chunksList"></div>
+      </div>
+      <div id="historyTab" class="tab-content">
+        <div id="historyList"></div>
       </div>
     </section>
   </main>
@@ -1083,6 +1153,7 @@
     const datasetStats  = document.getElementById("datasetStats");
     const documentsList = document.getElementById("documentsList");
     const chunksList    = document.getElementById("chunksList");
+    const historyList   = document.getElementById("historyList");
 
     /* ═══════════════════════════════════════════════════════════
        Node labels & icons
@@ -1112,8 +1183,9 @@
     let stepIdCounter = 0;
 
     // ── Clarification state ─────────────────────────────────
-    let pendingClarification = null; // {question, options, source, originalQuestion}
+    let pendingClarification = null; // {question, options, source, originalQuestion, thread_id}
     let selectedOption = null;       // currently selected option value
+    let currentThreadId = null;      // thread_id of the most recent run
 
     /* ═══════════════════════════════════════════════════════════
        Typewriter Engine
@@ -1488,6 +1560,7 @@
         options: evt.options || [],
         source: evt.source || "start",
         originalQuestion: questionInput.value.trim(),
+        thread_id: evt.thread_id || null,
       };
       selectedOption = null;
 
@@ -1547,7 +1620,9 @@
         return;
       }
 
+      // Capture before hideClarification() nulls pendingClarification
       const originalQ = pendingClarification.originalQuestion;
+      const resumeThreadId = pendingClarification.thread_id || null;
       hideClarification();
 
       // Show a step indicating user responded
@@ -1576,6 +1651,7 @@
         question: originalQ,
         max_iterations: Math.max(1, Math.min(5, maxIter)),
         clarification_response: response,
+        thread_id: resumeThreadId || undefined,
       };
 
       try {
@@ -1673,10 +1749,12 @@
           showClarification(evt);
           break;
         case "result":
+          if (evt.thread_id) currentThreadId = evt.thread_id;
           showResult(evt);
           break;
         case "done":
           finishPipeline();
+          refreshHistory();  // update history panel after each run
           break;
         case "error":
           showError(evt.detail || "Unknown error");
@@ -1826,12 +1904,107 @@
       }
     }
 
-    refreshBtn.addEventListener("click", refreshDataView);
+    refreshBtn.addEventListener("click", () => { refreshDataView(); refreshHistory(); });
+
+    /* ═══════════════════════════════════════════════════════════
+       Run History
+       ═══════════════════════════════════════════════════════════ */
+    async function refreshHistory() {
+      try {
+        const resp = await fetch("/ui/history");
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "Could not load history");
+        renderHistory(data.threads || []);
+      } catch (err) {
+        historyList.innerHTML = `<div class="history-empty">Failed to load history: ${esc(String(err))}</div>`;
+      }
+    }
+
+    function renderHistory(threads) {
+      if (threads.length === 0) {
+        historyList.innerHTML = '<div class="history-empty">No runs yet. Ask a question to get started.</div>';
+        return;
+      }
+
+      historyList.innerHTML = threads.map(t => {
+        const statusCls = t.status === "completed" ? "badge-completed" : "badge-interrupted";
+        const statusLabel = t.status === "completed" ? "Completed" : "Awaiting Input";
+        const tool = (t.tool_name || "rag").replace(/_/g, " ");
+
+        // Format timestamp
+        let ts = "";
+        if (t.created_at) {
+          try { ts = new Date(t.created_at).toLocaleString(); } catch { ts = t.created_at; }
+        }
+
+        // Answer preview (first 200 chars)
+        const answerPreview = t.answer
+          ? `<div class="history-answer">${esc(t.answer.slice(0, 200))}${t.answer.length > 200 ? "…" : ""}</div>`
+          : (t.status === "interrupted"
+            ? `<div class="history-answer" style="color:var(--ink-3);font-style:italic">Waiting for: ${esc(t.clarification_question || "clarification")}</div>`
+            : "");
+
+        // References pills
+        const refs = (t.references || []).slice(0, 3);
+        const refsPart = refs.length
+          ? `<div class="history-refs">${refs.map(r => `<span class="data-pill">${esc(r)}</span>`).join("")}</div>`
+          : "<span></span>";
+
+        // Resume button for interrupted threads
+        const resumeBtn = t.status === "interrupted"
+          ? `<button class="history-resume-btn" data-thread="${esc(t.thread_id)}" data-question="${esc(t.question)}">Resume</button>`
+          : "";
+
+        return `
+          <div class="history-item">
+            <div class="history-top">
+              <div class="history-badges">
+                <span class="badge ${statusCls}">${statusLabel}</span>
+                <span class="badge badge-tool">${esc(tool)}</span>
+              </div>
+              <div style="flex:1">
+                <div class="history-question">${esc(t.question.slice(0, 120))}${t.question.length > 120 ? "…" : ""}</div>
+                <div class="history-meta">${ts ? ts + " · " : ""}Thread ${esc(t.thread_id.slice(0, 8))}…</div>
+              </div>
+            </div>
+            ${answerPreview}
+            <div class="history-footer">
+              ${refsPart}
+              ${resumeBtn}
+            </div>
+          </div>`;
+      }).join("");
+
+      // Wire up Resume buttons
+      historyList.querySelectorAll(".history-resume-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const threadId = btn.dataset.thread;
+          const question = btn.dataset.question;
+          // Populate question input and show clarification prompt
+          questionInput.value = question;
+          // Find the thread's clarification question from the threads array
+          const thread = threads.find(t => t.thread_id === threadId);
+          if (thread) {
+            clearPipeline();
+            emptyState.style.display = "none";
+            pipeContent.hidden = false;
+            showClarification({
+              thread_id: threadId,
+              question: thread.clarification_question || "Please provide more details.",
+              options: [],
+              source: "start",
+            });
+            pendingClarification.originalQuestion = question;
+          }
+        });
+      });
+    }
 
     /* ═══════════════════════════════════════════════════════════
        Init
        ═══════════════════════════════════════════════════════════ */
     refreshDataView();
+    refreshHistory();
   </script>
 </body>
 </html>
